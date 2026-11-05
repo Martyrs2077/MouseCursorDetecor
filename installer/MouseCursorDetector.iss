@@ -14,10 +14,12 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64os
 ArchitecturesInstallIn64BitMode=x64os
 MinVersion=10.0
-DisableDirPage=yes
+DisableDirPage=no
 DisableProgramGroupPage=yes
 OutputBaseFilename=MouseCursorDetector-Setup
 SetupIconFile=..\src\mouse_cursor_detector\resources\app.ico
+Uninstallable=yes
+UninstallFilesDir={app}
 UninstallDisplayIcon={app}\MouseCursorDetector.exe
 WizardStyle=modern
 Compression=lzma2
@@ -32,6 +34,17 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 ; Never package the developer's config/ or styles/ directories.
 Source: "{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
+
+[Registry]
+; Remove legacy settings on uninstall without creating them during installation.
+Root: HKCU; Subkey: "Software\MouseCursorDetector"; Flags: dontcreatekey uninsdeletekey
+
+[UninstallDelete]
+; These two directories contain this installation's runtime data only.
+; Never recursively delete {app}: it may contain unrelated user files.
+Type: filesandordirs; Name: "{app}\config"
+Type: filesandordirs; Name: "{app}\styles"
+Type: dirifempty; Name: "{app}"
 
 [Icons]
 Name: "{userdesktop}\MouseCursorDetector"; Filename: "{app}\MouseCursorDetector.exe"; WorkingDir: "{app}"
@@ -57,4 +70,3 @@ begin
     end;
   end;
 end;
-{ Runtime-created config/ and styles/ are intentionally retained on uninstall. }
