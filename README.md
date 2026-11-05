@@ -1,12 +1,22 @@
 # MouseCursorDetector
 
-Windows 10/11 x64 鼠标位置提示工具。当前已编写首版 C++17 / Win32 源码，**已有首轮构建产物，尚未运行验证；后续编译仅由用户手动执行**。
+Windows 10/11 x64 鼠标位置提示工具，使用 C++17 / Win32。仓库提供源码、便携 EXE 和安装包；**助手尚未运行验证现有产物，编译仅由开发者手动执行**。
+
+## 下载与使用
+
+普通使用者可从 [v0.1.0 Release](https://github.com/Martyrs2077/MouseCursorDetecor/releases/tag/v0.1.0) 下载：
+
+- [MouseCursorDetector-Setup.exe 安装包](https://github.com/Martyrs2077/MouseCursorDetecor/releases/download/v0.1.0/MouseCursorDetector-Setup.exe)：当前用户安装，自动创建桌面和开始菜单快捷方式。
+- [MouseCursorDetector.exe 便携版](https://github.com/Martyrs2077/MouseCursorDetecor/releases/download/v0.1.0/MouseCursorDetector.exe)：保存到可写目录后直接使用。
+- `SHA256SUMS.txt`：用于核对下载文件完整性，静态核查范围见 [发布说明](docs/releases/v0.1.0.md)。
+
+根目录也随源码保留这两个 EXE。`build.cmd` 与 `scripts/build.ps1` 供开发者手动编译源码使用，普通使用者无需执行；用户配置和导入素材不包含在下载文件中。
 
 2026-11-02 已按用户确认改为便携目录配置：运行时在 EXE 旁使用 `config/settings.json` 和 `styles/`。自定义图片/GIF 的导入、保存和播放源码已接入，尚未编译或运行验收。使用步骤与限制见 [PORTABLE_STYLES.md](docs/PORTABLE_STYLES.md)；MP4 尚未实现。
 
 ## 功能实现范围
 
-- 2026-11-04 界面源码已按「焦点工作台」重写：左侧固定导航、深色预览舞台、统一四主题布局。顶部原“主设置 / 素材导入 / 主题选择”Tab 已由左侧导航替代；切换主题即时预览，保存设置后写入 `ui_theme` 并在重启后恢复，取消撤销未保存主题。素材导入改为同一窗口的独立页面，“保存样式”仍只提交样式库。设计决策见 [DESIGN.md](DESIGN.md)。本次尚未编译及运行验收，现有 EXE 不包含这些源码更新。
+- 2026-11-04 界面源码已按「焦点工作台」重写：左侧固定导航、深色预览舞台、统一四主题布局。顶部原“主设置 / 素材导入 / 主题选择”Tab 已由左侧导航替代；切换主题即时预览，保存设置后写入 `ui_theme` 并在重启后恢复，取消撤销未保存主题。素材导入改为同一窗口的独立页面，“保存样式”仍只提交样式库。设计决策见 [DESIGN.md](DESIGN.md)。本段描述源码实现，现有产物的静态核查和验证边界见对应发布说明。
 
 - 2026-11-05 新增中英文配置，默认中文。三个页面右上角均提供固定名称 `Language/语言` 按钮，直接复用“保存设置”的主按钮样式；点击即时切换软件界面、托盘菜单和应用提示，语言随“保存设置”写入 `ui_language`（0 中文、1 英文）。切换不清空当前输入或素材路径；“保存样式”不提交语言，取消主设置恢复最近保存的语言。系统文件/颜色对话框、系统错误描述和键名仍由 Windows 提供；用户素材名称、路径及许可原文不翻译。
 - 提示设置的四个数值框和快捷键框直接复用素材库“导入新素材”的 `PrepareField()`，统一左对齐、10pt Microsoft YaHei UI 及 31 DIP 高度；保留原生数字限制、快捷键捕获、外部单位和滑块排布。当前样式下拉框继续复用相同表面及原生选择行为。右上角不再绘制逗号/句号快捷键装饰。
@@ -56,7 +66,7 @@ installer/MouseCursorDetector.iss 当前用户安装包配置
 
 代码按 Google C++ Style Guide 编写，格式由根目录 `.clang-format` 的 Google 预设约束。参考设计分析见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-## 由用户手动执行的构建
+## 供开发者手动执行的构建
 
 本机工具链安装于 `C:\GCC\ucrt64\bin`；如使用其他位置，需同步修改 CMakePresets、VS Code 配置及构建脚本中的路径。
 
@@ -87,7 +97,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
 
 重新安装保留已有设置和素材；安装或卸载时若软件仍在运行，会要求先退出。通过 Windows“已安装的应用”或开始菜单卸载入口可卸载；卸载保留 `config/` 和 `styles/`，仅在自启动条目确实指向本安装目录时清除该条目。
 
-本次只修改构建脚本及安装配置，尚未执行软件或安装包构建。用户手动构建后还需验收：两个根目录产物生成、普通用户安装、桌面快捷方式启动、保存设置和导入素材、覆盖安装保留数据、卸载删除快捷方式并保留数据。
+软件与安装包仅由开发者手动构建；本次发布使用现有产物，助手未执行构建、安装或运行。仍需验收：普通用户安装、桌面快捷方式启动、保存设置和导入素材、覆盖安装保留数据、卸载删除快捷方式并保留数据。
 
 VS Code 调试使用 `gcc-debug` 配置预设和 `debug` 构建预设，之后选择 launch 配置。该配置没有自动构建任务；先手动构建才有可调试程序。CMake 配置本身会探测编译器，也只能由用户手动触发。
 

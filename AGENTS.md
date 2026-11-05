@@ -49,9 +49,11 @@ MouseCursorDetector 是 Windows 10/11 x64 的鼠标位置提示工具。默认�
 - 项目没有自动化测试套件；验证以用户手动构建后的交互验收为主，不得虚构构建、测试或运行结果。
 - 助手修改源码后，默认应说明“尚未编译、尚未运行验证”，并列出需要用户手动执行的构建和验收项。
 - 除非用户明确要求，不启动根目录 EXE、安装包或 `build/` 中的产物；运行会产生或修改用户配置与素材。
-- 截至 2026-11-04，根目录存在 `MouseCursorDetector.exe`、`MouseCursorDetector-Setup.exe` 和 `config/settings.json`，但它们属于用户运行数据，不得擅自删除、重置或提交。
+- 2026-11-05 用户明确要求根目录 `MouseCursorDetector.exe` 和 `MouseCursorDetector-Setup.exe` 随源码提交，并将现有两个产物上传 GitHub Release。此授权不包含助手构建、运行或安装；不得擅自删除或重置这些文件。`config/settings.json` 和用户导入素材仍保留在本地。
 
-## 4. 构建与发布（仅供用户执行）
+## 4. 构建与发布（构建仅供用户执行）
+
+普通使用者可直接下载 GitHub Release 中的便携 EXE 或安装包。`build.cmd`、VS Code 构建任务和 `scripts/build.ps1` 供开发者手动编译使用，不是普通使用者运行软件的前置步骤。发布 Release 必须有用户的明确发布要求；上传现有产物不代表助手获准重新构建或运行。
 
 工具链固定为 `C:\GCC\ucrt64\bin`，Preset 为 `gcc-debug` / `gcc-release`。用户可任选一种方式手动构建：
 
@@ -135,7 +137,7 @@ src/mouse_cursor_detector/
 - 提示显示状态仅在本次运行有效，不持久化；每次启动默认隐藏并继续监听。
 - 素材文件复制到 EXE 旁的 `styles/`，配置只保存 `styles/唯一文件名.ext` 形式的相对路径；拒绝绝对路径、`..` 跳转、嵌套目录和同名显示名称（严格区分大小写）。
 - 样式库最多 512 项，显示名称最多 255 个 UTF-16 字符；素材大小、尺寸、帧数等限制见 `docs/PORTABLE_STYLES.md`。
-- `config/`、`styles/`、根目录 EXE、`build/`、`dist/`、`.tools/`、`.reference/` 均属于本地或生成内容，不得当作源码提交。
+- `config/`、`styles/`、`build/`、`dist/`、`.tools/`、`.reference/` 均属于本地或生成内容，不得当作源码提交。经用户明确授权，根目录 `MouseCursorDetector.exe` 和 `MouseCursorDetector-Setup.exe` 作为交付物纳入版本控制。
 
 默认值（修改默认行为前先确认这是用户要求）：
 
@@ -180,7 +182,7 @@ src/mouse_cursor_detector/
 
 2026-11-05 经用户确认，本目录已建立独立 Git 仓库，Git 根目录必须为本项目目录。同步目标为 `Martyrs2077/MouseCursorDetecor` 的 `Dev` 分支；不得在 `C:\Users\25036` 的上级仓库中暂存、提交或推送本项目。
 
-源码、文档、构建配置和项目技能纳入版本控制；`config/`、`styles/`、根目录 EXE、`build/`、`dist/`、`.tools/`、`.reference/` 和 `design-previews/` 保留在本地，不提交。首次覆盖远端分支已获用户明确授权，后续同步仍默认普通推送；再次重写远端历史需另行获得用户明确授权。
+源码、文档、构建配置、项目技能和根目录两个交付物 `MouseCursorDetector.exe`、`MouseCursorDetector-Setup.exe` 纳入版本控制；`config/`、`styles/`、`build/`、`dist/`、`.tools/`、`.reference/` 和 `design-previews/` 保留在本地，不提交。首次覆盖远端分支已获用户明确授权，后续同步仍默认普通推送；再次重写远端历史需另行获得用户明确授权。
 
 默认运行及构建所需素材必须随源码提交，当前包括 `src/mouse_cursor_detector/resources/` 中的图标、清单和许可。默认光圈与高亮由代码绘制，无外部素材依赖；`config/settings.json` 当前没有引用自定义素材。后续若增加文件形式的默认素材，应同步提交其文件并核对配置引用完整性。
 

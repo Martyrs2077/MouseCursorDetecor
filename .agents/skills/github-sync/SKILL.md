@@ -1,6 +1,6 @@
 ---
 name: github-sync
-description: 仅为 MouseCursorDetector 项目执行 GitHub 同步。用户要求推送代码、提交并上传或拉取远端更新时使用；推送包含本次相关改动的提交，拉取只允许快进。遵守项目仓库范围、手动构建和运行数据保护约定。不用于发布 Release、上传安装包或其他项目。
+description: 仅为 MouseCursorDetector 项目执行 GitHub 同步。用户要求推送代码、提交并上传或拉取远端更新时使用；推送包含相关源码及已授权的根目录 EXE 交付物，拉取只允许快进。遵守手动构建和运行数据保护约定。不用于创建 Release、上传 Release 附件或其他项目。
 ---
 
 # MouseCursorDetector GitHub 同步
@@ -34,7 +34,7 @@ description: 仅为 MouseCursorDetector 项目执行 GitHub 同步。用户要�
 
 1. 从 skill 文件路径定位项目根目录，使用 `git -C` 显式指定工作目录。
    检查 `rev-parse --show-toplevel` 与项目根目录的规范化绝对路径是否一致。
-   2026-11-05 核实本项目没有独立 `.git`，Git 根目录是 `C:/Users/25036`。
+   2026-11-05 已经用户确认建立项目独立 `.git`，目标分支为 `Dev`。
    每次重新核实，不能把这条历史记录当作当前状态。
 2. 如果仍归属上级用户目录仓库，停止该仓库中的写操作。说明实际根目录，
    询问是否仅为本项目建立独立仓库；同时明确排除下述生成物和运行数据。
@@ -59,10 +59,14 @@ description: 仅为 MouseCursorDetector 项目执行 GitHub 同步。用户要�
 
 ## 保护项目文件
 
-- 不提交 `config/`、`styles/`、根目录 EXE、`build/`、`dist/`、`.tools/`、
+- 不提交 `config/`、`styles/`、`build/`、`dist/`、`.tools/`、
   `.reference/` 及其他本地生成内容。读取实际 `.gitignore`，不能仅凭其存在
   就认定文件未被跟踪；检查索引和待提交清单。
-- 已被跟踪的配置、生成物或敏感文件需要单独说明，不能强行添加或擅自移出索引。
+- 2026-11-05 用户明确要求根目录 `MouseCursorDetector.exe` 和
+  `MouseCursorDetector-Setup.exe` 随源码提交；这两个交付物是上述生成物排除规则的例外。
+  提交现有文件并核对哈希，不为同步重新编译、打包或启动文件。
+  `build.cmd` 是供开发者手动编译的入口，应随源码保留。
+- 已被跟踪但未经用户授权提交的配置、生成物或敏感文件需要单独说明，不能强行添加或擅自移出索引。
   若推送范围内已有提交包含这些内容，先解决泄露或发布范围问题，不能只检查最新 diff。
 - 不删除、重置或覆盖用户文件，不使用 `git clean`、`reset --hard`、强制 checkout。
   默认不 stash、不 amend、不 rebase、不重写历史、不强制推送，不自动采用
