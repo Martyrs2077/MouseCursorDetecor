@@ -1,0 +1,10 @@
+build/
+dist/
+.tools/
+/MouseCursorDetector.exe
+/MouseCursorDetector-Setup.exe
+/config/
+/styles/
+.reference/
+/design-previews/
+*.user

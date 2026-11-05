@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GCC: Debug existing executable (no automatic build)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/gcc-debug/MouseCursorDetector.exe",
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "C:/GCC/ucrt64/bin/gdb.exe",
+      "externalConsole": false,
+      "environment": [
+        { "name": "PATH", "value": "C:/GCC/ucrt64/bin;${env:PATH}" }
+      ]
+    }
+  ]
+}
+

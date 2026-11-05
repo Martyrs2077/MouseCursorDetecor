@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="660" viewBox="0 0 1080 660">
+<rect width="1080" height="660" fill="#eef1f5"/>
+<g font-family="Microsoft YaHei UI,Microsoft YaHei,Segoe UI,sans-serif" font-size="13" fill="#333">
+<text x="16" y="29" font-size="17" fill="#333" font-weight="600">设置界面布局参考（非软件运行截图）</text>
+<rect x="12" y="48" width="540" height="566" rx="8" fill="#f8f8f8" stroke="#d8d8d8"/>
+<rect x="12" y="48" width="540" height="36" rx="8" fill="#fff" stroke="#d8d8d8"/>
+<text x="28" y="72" font-size="14" fill="#333" font-weight="400">鼠标提示设置</text>
+<text x="504" y="72" font-size="18" fill="#666" font-weight="400">×</text>
+<text x="36" y="119" font-size="14" fill="#333" font-weight="600">高亮样式</text>
+<text x="48" y="159" font-size="13" fill="#333" font-weight="400">光圈样式</text>
+<rect x="192" y="134" width="330" height="28" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="206" y="153" font-size="13" fill="#333" font-weight="400">高亮光标（半透明底色）</text>
+<text x="500" y="153" font-size="13" fill="#777" font-weight="400">▾</text>
+<text x="48" y="192" font-size="13" fill="#333" font-weight="400">光标半径</text>
+<rect x="192" y="172" width="70" height="28" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="206" y="192" font-size="13" fill="#333" font-weight="400">24</text>
+<text x="270" y="192" font-size="13" fill="#333" font-weight="400">DIP</text>
+<line x1="322" y1="186" x2="512" y2="186" stroke="#ccc" stroke-width="4"/>
+<line x1="322" y1="186" x2="354.3" y2="186" stroke="#0078d4" stroke-width="4"/>
+<circle cx="354.3" cy="186" r="6" fill="#0078d4"/>
+<text x="48" y="268" font-size="13" fill="#333" font-weight="400">不透明度</text>
+<rect x="192" y="248" width="70" height="28" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="206" y="268" font-size="13" fill="#333" font-weight="400">25</text>
+<text x="270" y="268" font-size="13" fill="#333" font-weight="400">%</text>
+<line x1="322" y1="262" x2="512" y2="262" stroke="#ccc" stroke-width="4"/>
+<line x1="322" y1="262" x2="393.25" y2="262" stroke="#0078d4" stroke-width="4"/>
+<circle cx="393.25" cy="262" r="6" fill="#0078d4"/>
+<text x="48" y="306" font-size="13" fill="#333" font-weight="400">显示时长</text>
+<rect x="192" y="286" width="70" height="28" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="206" y="306" font-size="13" fill="#333" font-weight="400">3</text>
+<text x="270" y="306" font-size="13" fill="#333" font-weight="400">秒</text>
+<line x1="322" y1="300" x2="512" y2="300" stroke="#ccc" stroke-width="4"/>
+<line x1="322" y1="300" x2="329.6" y2="300" stroke="#0078d4" stroke-width="4"/>
+<circle cx="329.6" cy="300" r="6" fill="#0078d4"/>
+<text x="48" y="230" font-size="13" fill="#333" font-weight="400">颜色</text>
+<rect x="192" y="210" width="140" height="32" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="205" y="231" font-size="13" fill="#333" font-weight="400">选择颜色…</text>
+<text x="48" y="344" font-size="12" fill="#777" font-weight="400">半径：8–100 DIP；时长：1–3600 秒</text>
+<line x1="36" y1="364" x2="528" y2="364" stroke="#ddd" stroke-width="1"/>
+<text x="36" y="394" font-size="14" fill="#333" font-weight="600">快捷键</text>
+<text x="48" y="427" font-size="13" fill="#333" font-weight="400">触发快捷键</text>
+<rect x="192" y="406" width="330" height="28" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="206" y="426" font-size="13" fill="#333" font-weight="400">， + 。</text>
+<line x1="36" y1="448" x2="528" y2="448" stroke="#ddd" stroke-width="1"/>
+<text x="36" y="478" font-size="14" fill="#333" font-weight="600">系统选项</text>
+<rect x="48" y="497" width="16" height="16" rx="3" fill="#fff" stroke="#aaa"/>
+<text x="76" y="511" font-size="12" fill="#333" font-weight="400">开机自启动（登录后启动软件）</text>
+<rect x="362" y="490" width="160" height="32" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="375" y="511" font-size="13" fill="#333" font-weight="400">导入光圈样式</text>
+<text x="36" y="542" font-size="12" fill="#777" font-weight="400">高亮不透明度为 10%–50%；时长下次触发生效。</text>
+<text x="36" y="559" font-size="12" fill="#777" font-weight="400">不修改系统原有光标。</text>
+<rect x="36" y="570" width="110" height="32" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="49" y="591" font-size="13" fill="#333" font-weight="400">恢复默认</text>
+<rect x="352" y="570" width="80" height="32" rx="5" fill="#0078d4" stroke="#ccc"/>
+<text x="365" y="591" font-size="13" fill="#fff" font-weight="400">确定</text>
+<rect x="442" y="570" width="80" height="32" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="455" y="591" font-size="13" fill="#333" font-weight="400">取消</text>
+<text x="590" y="80" font-size="13" fill="#555" font-weight="400">任意模式下均可打开二级窗口</text>
+<rect x="590" y="104" width="468" height="380" rx="8" fill="#f8f8f8" stroke="#d8d8d8"/>
+<rect x="590" y="104" width="468" height="36" rx="8" fill="#fff" stroke="#d8d8d8"/>
+<text x="606" y="128" font-size="14" fill="#333" font-weight="400">导入光圈样式</text>
+<text x="1026" y="128" font-size="18" fill="#666" font-weight="400">×</text>
+<text x="614" y="171" font-size="13" fill="#333" font-weight="400">素材路径</text>
+<rect x="614" y="184" width="306" height="28" rx="5" fill="#fff" stroke="#ccc"/>
+<rect x="932" y="184" width="102" height="32" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="945" y="205" font-size="13" fill="#333" font-weight="400">浏览…</text>
+<rect x="614" y="228" width="120" height="32" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="627" y="249" font-size="13" fill="#333" font-weight="400">导入素材</text>
+<text x="754" y="248" font-size="12" fill="#777" font-weight="400">素材状态：未导入</text>
+<text x="614" y="290" font-size="13" fill="#333" font-weight="400">预览</text>
+<rect x="614" y="304" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="624" y="304" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="634" y="304" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="644" y="304" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="654" y="304" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="664" y="304" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="674" y="304" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="684" y="304" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="694" y="304" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="704" y="304" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="714" y="304" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="724" y="304" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="734" y="304" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="614" y="314" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="624" y="314" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="634" y="314" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="644" y="314" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="654" y="314" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="664" y="314" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="674" y="314" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="684" y="314" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="694" y="314" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="704" y="314" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="714" y="314" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="724" y="314" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="734" y="314" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="614" y="324" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="624" y="324" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="634" y="324" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="644" y="324" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="654" y="324" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="664" y="324" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="674" y="324" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="684" y="324" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="694" y="324" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="704" y="324" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="714" y="324" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="724" y="324" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="734" y="324" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="614" y="334" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="624" y="334" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="634" y="334" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="644" y="334" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="654" y="334" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="664" y="334" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="674" y="334" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="684" y="334" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="694" y="334" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="704" y="334" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="714" y="334" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="724" y="334" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="734" y="334" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="614" y="344" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="624" y="344" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="634" y="344" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="644" y="344" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="654" y="344" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="664" y="344" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="674" y="344" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="684" y="344" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="694" y="344" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="704" y="344" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="714" y="344" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="724" y="344" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="734" y="344" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="614" y="354" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="624" y="354" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="634" y="354" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="644" y="354" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="654" y="354" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="664" y="354" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="674" y="354" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="684" y="354" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="694" y="354" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="704" y="354" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="714" y="354" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="724" y="354" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="734" y="354" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="614" y="364" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="624" y="364" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="634" y="364" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="644" y="364" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="654" y="364" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="664" y="364" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="674" y="364" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="684" y="364" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="694" y="364" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="704" y="364" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="714" y="364" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<rect x="724" y="364" width="10" height="10" rx="0" fill="#fff" stroke="none"/>
+<rect x="734" y="364" width="10" height="10" rx="0" fill="#e4e4e4" stroke="none"/>
+<text x="646" y="345" font-size="12" fill="#777" font-weight="400">尚无素材</text>
+<text x="770" y="324" font-size="12" fill="#777" font-weight="400">支持图片与 GIF，</text>
+<text x="770" y="345" font-size="12" fill="#777" font-weight="400">保留素材透明度。</text>
+<text x="614" y="402" font-size="12" fill="#777" font-weight="400">保存后加入光圈样式列表。</text>
+<text x="614" y="422" font-size="12" fill="#777" font-weight="400">取消恢复进入前的样式选择。</text>
+<rect x="858" y="440" width="80" height="32" rx="5" fill="#0078d4" stroke="#ccc"/>
+<text x="871" y="461" font-size="13" fill="#fff" font-weight="400">保存</text>
+<rect x="948" y="440" width="86" height="32" rx="5" fill="#fff" stroke="#ccc"/>
+<text x="961" y="461" font-size="13" fill="#333" font-weight="400">取消</text>
+<text x="590" y="540" font-size="12" fill="#555" font-weight="400">说明：光圈模式另显示线宽行；输入框内只显示数字。</text>
+<text x="590" y="565" font-size="12" fill="#555" font-weight="400">素材使用独立路径保存，名称严格区分大小写检查重名。</text>
+<text x="16" y="643" font-size="12" fill="#777" font-weight="400">保留原生 Windows 标题栏与控件；实际外观以用户手动构建后的系统主题为准。</text>
+</g></svg>
