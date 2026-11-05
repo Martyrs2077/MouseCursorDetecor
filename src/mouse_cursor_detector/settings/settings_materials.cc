@@ -2,11 +2,15 @@
 
 #include <commctrl.h>
 #include <objidl.h>
+#include <shellscalingapi.h>
+#include <windowsx.h>
 
 #include <gdiplus.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cwchar>
+#include <exception>
 #include <string>
 
 #include "mouse_cursor_detector/resources/resource.h"
@@ -19,9 +23,175 @@ namespace {
 constexpr UINT_PTR kPreviewTimer = settings_ui::kAnimationTimer;
 }  // namespace
 
+SettingsWindow::PreviewGeometry SettingsWindow::GetPreviewGeometry(
+    HWND control) const {
+  RECT bounds{};
+  GetClientRect(control, &bounds);
+  const auto px = [control](int dip) {
+    return settings_ui::Scale(control, dip);
+  };
+  const bool material = GetDlgCtrlID(control) == IDC_MATERIAL_PREVIEW;
+  PreviewGeometry geometry;
+  geometry.area =
+      material
+          ? RECT{px(16), px(16), bounds.right - px(16), bounds.bottom - px(16)}
+          : RECT{px(17), px(45), bounds.right - px(17), bounds.bottom - px(46)};
+  geometry.center_x = (geometry.area.left + geometry.area.right) / 2.0f;
+  geometry.center_y = (geometry.area.top + geometry.area.bottom) / 2.0f;
+  const float available_radius =
+      std::max(1.0f, std::min(geometry.area.right - geometry.area.left,
+                              geometry.area.bottom - geometry.area.top) /
+                         2.0f);
+  geometry.scale =
+      available_radius / (material || draft_.is_custom() ? 256.0f : 110.0f);
+  return geometry;
+}
+
+void SettingsWindow::PreparePreview(HWND control) {
+  SetWindowLongPtrW(control, GWL_STYLE,
+                    GetWindowLongPtrW(control, GWL_STYLE) | SS_NOTIFY);
+  if (!SetWindowSubclass(control, PreviewProc, 1,
+                         reinterpret_cast<DWORD_PTR>(this)))
+    MessageBoxW(window_, Tr(L"无法初始化预览拖动，请关闭设置后重试。"),
+                Tr(L"鼠标提示"), MB_OK | MB_ICONERROR);
+}
+
+bool SettingsWindow::RefreshPreviewCursor() {
+  CURSORINFO info{sizeof(info)};
+  const bool available = GetCursorInfo(&info) && info.hCursor;
+  const HCURSOR cursor =
+      available ? info.hCursor : LoadCursorW(nullptr, IDC_ARROW);
+  UINT dpi_x = 96;
+  UINT dpi_y = 96;
+  if (available &&
+      FAILED(GetDpiForMonitor(
+          MonitorFromPoint(info.ptScreenPos, MONITOR_DEFAULTTONEAREST),
+          MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y)))
+    dpi_x = 96;
+  const bool changed =
+      cursor != preview_cursor_ || dpi_x != preview_cursor_dpi_;
+  preview_cursor_ = cursor;
+  preview_cursor_dpi_ = dpi_x;
+  return changed;
+}
+
+void SettingsWindow::DrawPreviewCursor(HDC dc, HWND control) {
+  RefreshPreviewCursor();
+  ICONINFO info{};
+  if (!preview_cursor_ || !GetIconInfo(preview_cursor_, &info)) return;
+  BITMAP bitmap{};
+  const bool color = info.hbmColor != nullptr;
+  const bool valid = GetObjectW(color ? info.hbmColor : info.hbmMask,
+                                sizeof(bitmap), &bitmap) != 0;
+  if (info.hbmColor) DeleteObject(info.hbmColor);
+  if (info.hbmMask) DeleteObject(info.hbmMask);
+  if (!valid || bitmap.bmWidth <= 0 || bitmap.bmHeight <= 0) return;
+  const auto geometry = GetPreviewGeometry(control);
+  // The cursor bitmap is already in screen pixels. Scale it by the same
+  // preview-to-screen ratio as the image, and anchor its actual hotspot.
+  const float ratio = geometry.scale * 96.0f / preview_cursor_dpi_;
+  const int width =
+      std::max(1, static_cast<int>(std::lround(bitmap.bmWidth * ratio)));
+  const int height = std::max(
+      1, static_cast<int>(std::lround(
+             (color ? bitmap.bmHeight : bitmap.bmHeight / 2) * ratio)));
+  const int saved = SaveDC(dc);
+  if (!saved) return;
+  IntersectClipRect(dc, geometry.area.left, geometry.area.top,
+                    geometry.area.right, geometry.area.bottom);
+  DrawIconEx(
+      dc,
+      static_cast<int>(std::lround(geometry.center_x - info.xHotspot * ratio)),
+      static_cast<int>(std::lround(geometry.center_y - info.yHotspot * ratio)),
+      preview_cursor_, width, height, 0, nullptr, DI_NORMAL);
+  RestoreDC(dc, saved);
+}
+
+void SettingsWindow::DragPreview(HWND control, POINT point) {
+  const auto geometry = GetPreviewGeometry(control);
+  const auto coordinate = [](float value, float minimum, float maximum) {
+    return static_cast<int>(std::lround(std::clamp(value, minimum, maximum)));
+  };
+  // Keep the image center in the stage so some of it remains draggable.
+  const float x =
+      drag_offset_.x_dip + (point.x - drag_origin_.x) / geometry.scale;
+  const float y =
+      drag_offset_.y_dip + (point.y - drag_origin_.y) / geometry.scale;
+  const ImageOffset offset{
+      std::clamp(
+          coordinate(
+              x, (geometry.area.left - geometry.center_x) / geometry.scale,
+              (geometry.area.right - geometry.center_x) / geometry.scale),
+          -kMaxImageOffsetDip, kMaxImageOffsetDip),
+      std::clamp(
+          coordinate(
+              y, (geometry.area.top - geometry.center_y) / geometry.scale,
+              (geometry.area.bottom - geometry.center_y) / geometry.scale),
+          -kMaxImageOffsetDip, kMaxImageOffsetDip)};
+  const auto found = draft_.image_offsets.find(draft_.style_name);
+  if (found == draft_.image_offsets.end()) return;
+  found->second = offset;
+  PreviewDraft();
+  InvalidateRect(control, nullptr, FALSE);
+  UpdateWindow(control);
+}
+
+LRESULT CALLBACK SettingsWindow::PreviewProc(HWND window, UINT message,
+                                             WPARAM wparam, LPARAM lparam,
+                                             UINT_PTR subclass_id,
+                                             DWORD_PTR reference) {
+  auto* self = reinterpret_cast<SettingsWindow*>(reference);
+  try {
+    if (message == WM_LBUTTONDOWN && !self->MaterialBusy() &&
+        !self->naming_style_ && self->draft_.is_custom() &&
+        !self->draft_.style_name.empty() && self->draft_.image_asset) {
+      const auto geometry = self->GetPreviewGeometry(window);
+      const POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      if (PtInRect(&geometry.area, point)) {
+        // Permit grabbing the stage as well as transparent image pixels.
+        // This also recovers a saved position after the viewport is resized.
+        const auto inserted = self->draft_.image_offsets.try_emplace(
+            self->draft_.style_name, ImageOffset{});
+        self->drag_offset_ = inserted.first->second;
+        self->drag_origin_ = point;
+        self->dragged_preview_ = window;
+        SetCapture(window);
+        if (GetCapture() != window) self->dragged_preview_ = nullptr;
+        return 0;
+      }
+    }
+    if (self->dragged_preview_ == window) {
+      if (message == WM_MOUSEMOVE || message == WM_LBUTTONUP) {
+        self->DragPreview(window,
+                          POINT{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)});
+        if (message == WM_LBUTTONUP) ReleaseCapture();
+        return 0;
+      }
+      if (message == WM_CAPTURECHANGED) self->dragged_preview_ = nullptr;
+      if (message == WM_CANCELMODE || message == WM_SIZE ||
+          (message == WM_SHOWWINDOW && !wparam) || message == WM_NCDESTROY) {
+        self->dragged_preview_ = nullptr;
+        if (GetCapture() == window) ReleaseCapture();
+      }
+    }
+  } catch (const std::exception&) {
+    self->dragged_preview_ = nullptr;
+    if (GetCapture() == window) ReleaseCapture();
+    MessageBoxW(self->window_, Tr(L"无法调整预览位置，请重试。"),
+                Tr(L"鼠标提示"), MB_OK | MB_ICONERROR);
+    return 0;
+  }
+  if (message == WM_NCDESTROY)
+    RemoveWindowSubclass(window, PreviewProc, subclass_id);
+  return DefSubclassProc(window, message, wparam, lparam);
+}
+
 void SettingsWindow::ShowMaterials() {
-  if (import_future_.valid() || !ReadControls(true)) return;
-  if (materials_window_) return;
+  if (MaterialBusy() || !ReadControls(true)) return;
+  if (materials_window_) {
+    BeginLibraryRefresh();
+    return;
+  }
   materials_before_ = draft_;
   materials_previous_preview_ = preview_settings_;
   HWND result = nullptr;
@@ -43,18 +213,15 @@ void SettingsWindow::ShowMaterials() {
     return;
   }
   SetFocus(GetDlgItem(materials_window_, IDC_MATERIAL_PATH));
+  BeginLibraryRefresh();
 }
 
 void SettingsWindow::CloseMaterials(bool save, Page next_page) {
-  if (!materials_window_ || import_future_.valid() || naming_style_) return;
+  if (!materials_window_ || MaterialBusy() || naming_style_) return;
   if (save) {
-    if (draft_.user_styles.size() != original_.user_styles.size()) {
-      // Commit only the independent material library, never the theme draft.
-      Settings saved = original_;
-      saved.user_styles = draft_.user_styles;
-      if (!commit_(saved)) return;
-      original_.user_styles = saved.user_styles;
-    }
+    if (!ReadControls(true) || !commit_(draft_)) return;
+    original_ = draft_;
+    preview_settings_ = draft_;
   }
   {
     const settings_ui::ScopedRedraw redraw(window_);
@@ -96,6 +263,7 @@ INT_PTR CALLBACK SettingsWindow::MaterialsProc(HWND window, UINT message,
                               settings_ui::kPanel);
     SetDialogDpiChangeBehavior(window, DDC_DISABLE_ALL, DDC_DISABLE_ALL);
     self->preview_started_ = GetTickCount64();
+    self->PreparePreview(GetDlgItem(window, IDC_MATERIAL_PREVIEW));
     SetWindowTextW(window, Tr(L"素材库"));
     SetDlgItemTextW(window, IDC_MATERIAL_TITLE, Tr(L"素材库"));
     SetDlgItemTextW(window, IDC_MATERIAL_PATH_LABEL, Tr(L"导入新素材"));
@@ -103,20 +271,23 @@ INT_PTR CALLBACK SettingsWindow::MaterialsProc(HWND window, UINT message,
     SetDlgItemTextW(window, IDC_MATERIAL_IMPORT, Tr(L"导入素材"));
     SetDlgItemTextW(window, IDC_MATERIAL_PREVIEW_LABEL, Tr(L"素材预览"));
     SetDlgItemTextW(window, IDC_MATERIAL_IMPORT_HINT, Tr(L"等待导入"));
-    SetDlgItemTextW(window, IDC_MATERIAL_FORMATS,
-                    Tr(L"最大 20 MiB · 导入后可命名并预览"));
+    SetDlgItemTextW(window, IDC_MATERIAL_FORMATS, Tr(L"最大 20 MiB"));
     SetDlgItemTextW(window, IDC_MATERIAL_PREVIEW_HINT, Tr(L"等待导入"));
     SetDlgItemTextW(window, IDC_MATERIAL_HINT,
                     Tr(L"素材会复制到 styles/，原文件可删除"));
-    SetDlgItemTextW(window, IDOK, Tr(L"保存样式"));
+    SetDlgItemTextW(window, IDOK, Tr(L"保存配置"));
+    SetDlgItemTextW(window, IDC_MATERIAL_REFRESH, Tr(L"刷新"));
+    ShowWindow(GetDlgItem(window, IDC_MATERIAL_STATUS), SW_HIDE);
+    ShowWindow(GetDlgItem(window, IDC_MATERIAL_DETAILS), SW_HIDE);
+    self->material_list_entries_.clear();
     SetDlgItemTextW(window, IDCANCEL, Tr(L"取消"));
     SendDlgItemMessageW(window, IDC_MATERIAL_PATH, EM_SETLIMITTEXT, 32767, 0);
     SendDlgItemMessageW(
         window, IDC_MATERIAL_PATH, EM_SETCUEBANNER, TRUE,
         reinterpret_cast<LPARAM>(Tr(L"选择文件，或粘贴完整路径")));
     self->CreateMaterialFonts();
-    for (const int id :
-         {IDC_MATERIAL_BROWSE, IDC_MATERIAL_IMPORT, IDOK, IDCANCEL})
+    for (const int id : {IDC_MATERIAL_BROWSE, IDC_MATERIAL_IMPORT,
+                         IDC_MATERIAL_REFRESH, IDOK, IDCANCEL})
       settings_ui::PrepareButton(GetDlgItem(window, id));
     for (const int id :
          {IDC_MATERIAL_PATH, IDC_MATERIAL_STATUS, IDC_MATERIAL_DETAILS})
@@ -152,6 +323,10 @@ INT_PTR CALLBACK SettingsWindow::MaterialsProc(HWND window, UINT message,
       self->LayoutMaterials();
       return TRUE;
     }
+    case WM_CTLCOLORLISTBOX:
+      return reinterpret_cast<INT_PTR>(
+          settings_ui::ControlBrush(reinterpret_cast<HDC>(wparam),
+                                    settings_ui::kPanel, settings_ui::kText));
     case WM_CTLCOLORSTATIC:
     case WM_CTLCOLOREDIT:
     case WM_CTLCOLORBTN: {
@@ -183,6 +358,17 @@ INT_PTR CALLBACK SettingsWindow::MaterialsProc(HWND window, UINT message,
         return TRUE;
       }
       if (self->naming_style_) return TRUE;
+      if (id == IDC_MATERIAL_LIST && HIWORD(wparam) == LBN_SELCHANGE) {
+        if (self->MaterialBusy() || self->loading_) return TRUE;
+        const auto index = SendDlgItemMessageW(window, id, LB_GETCURSEL, 0, 0);
+        if (index >= 0 && self->ReadControls(true))
+          self->BeginSelectStyle(static_cast<size_t>(index));
+        return TRUE;
+      }
+      if (id == IDC_MATERIAL_REFRESH) {
+        self->BeginLibraryRefresh();
+        return TRUE;
+      }
       if (id == IDC_MATERIAL_BROWSE) {
         self->BrowseStyle();
         return TRUE;
@@ -192,13 +378,13 @@ INT_PTR CALLBACK SettingsWindow::MaterialsProc(HWND window, UINT message,
         return TRUE;
       }
       if (id != IDOK && id != IDCANCEL) return FALSE;
-      if (self->import_future_.valid()) return TRUE;
+      if (self->MaterialBusy()) return TRUE;
       self->CloseMaterials(id == IDOK);
       return TRUE;
     }
     case WM_CLOSE:
       if (self->naming_style_) return TRUE;
-      if (self->import_future_.valid()) {
+      if (self->MaterialBusy()) {
         MessageBoxW(window, Tr(L"正在导入素材，请稍候再关闭。"),
                     Tr(L"导入光圈样式"), MB_OK);
       } else {
@@ -207,16 +393,22 @@ INT_PTR CALLBACK SettingsWindow::MaterialsProc(HWND window, UINT message,
       return TRUE;
     case WM_TIMER:
       if (wparam == kPreviewTimer && IsWindowVisible(self->window_) &&
-          !IsIconic(self->window_) && self->draft_.image_asset &&
-          self->draft_.image_asset->is_gif) {
-        InvalidateRect(GetDlgItem(window, IDC_MATERIAL_PREVIEW), nullptr,
-                       FALSE);
+          !IsIconic(self->window_)) {
+        const bool changed = self->RefreshPreviewCursor();
+        if (changed || (self->draft_.image_asset &&
+                        self->draft_.image_asset->is_gif))
+          InvalidateRect(GetDlgItem(window, IDC_MATERIAL_PREVIEW), nullptr,
+                         FALSE);
         return TRUE;
       }
       break;
     case WM_DRAWITEM: {
       const auto* item = reinterpret_cast<const DRAWITEMSTRUCT*>(lparam);
       if (!item) return FALSE;
+      if (item->CtlID == IDC_MATERIAL_LIST) {
+        self->DrawMaterialListItem(*item);
+        return TRUE;
+      }
       if (wparam == IDC_MATERIAL_PREVIEW) {
         self->DrawMaterialPreview(*item);
         return TRUE;
@@ -226,7 +418,8 @@ INT_PTR CALLBACK SettingsWindow::MaterialsProc(HWND window, UINT message,
         DRAWITEMSTRUCT buffered = *item;
         buffered.hDC = buffer.dc();
         const bool in_panel = item->CtlID == IDC_MATERIAL_IMPORT ||
-                              item->CtlID == IDC_MATERIAL_BROWSE;
+                              item->CtlID == IDC_MATERIAL_BROWSE ||
+                              item->CtlID == IDC_MATERIAL_REFRESH;
         settings_ui::Button(
             buffered,
             item->CtlID == IDOK || item->CtlID == IDC_MATERIAL_IMPORT ||
@@ -238,6 +431,8 @@ INT_PTR CALLBACK SettingsWindow::MaterialsProc(HWND window, UINT message,
       break;
     }
     case WM_DESTROY:
+      self->material_list_entries_.clear();
+      self->material_thumbnails_.clear();
       KillTimer(window, kPreviewTimer);
       for (HFONT& font : self->material_fonts_) {
         if (font) DeleteObject(font);
@@ -279,21 +474,55 @@ void SettingsWindow::CreateMaterialFonts() {
   for (HFONT font : material_fonts_)
     if (font) DeleteObject(font);
   material_fonts_ = fonts;
+  SendDlgItemMessageW(materials_window_, IDC_MATERIAL_LIST, LB_SETITEMHEIGHT, 0,
+                      settings_ui::Scale(materials_window_, 72));
 }
 
 void SettingsWindow::LoadMaterialControls() {
   if (!materials_window_) return;
-  const bool busy = import_future_.valid();
-  for (const int id : {IDC_MATERIAL_PATH, IDC_MATERIAL_BROWSE,
-                       IDC_MATERIAL_IMPORT, IDOK, IDCANCEL})
+  const bool busy = MaterialBusy();
+  for (const int id :
+       {IDC_MATERIAL_PATH, IDC_MATERIAL_BROWSE, IDC_MATERIAL_IMPORT,
+        IDC_MATERIAL_REFRESH, IDC_MATERIAL_LIST, IDOK, IDCANCEL})
     EnableWindow(GetDlgItem(materials_window_, id), !busy);
+  const HWND list = GetDlgItem(materials_window_, IDC_MATERIAL_LIST);
+  const bool changed =
+      SendMessageW(list, LB_GETCOUNT, 0, 0) == 0 ||
+      material_list_entries_.size() != draft_.user_styles.size() ||
+      !std::equal(material_list_entries_.begin(), material_list_entries_.end(),
+                  draft_.user_styles.begin(),
+                  [](const UserStyle& a, const UserStyle& b) {
+                    return a.name == b.name &&
+                           a.relative_path == b.relative_path;
+                  });
+  const auto top = SendMessageW(list, LB_GETTOPINDEX, 0, 0);
+  if (changed) {
+    SendMessageW(list, WM_SETREDRAW, FALSE, 0);
+    SendMessageW(list, LB_RESETCONTENT, 0, 0);
+    material_list_entries_ = draft_.user_styles;
+    if (material_list_entries_.empty())
+      SendMessageW(list, LB_ADDSTRING, 0,
+                   reinterpret_cast<LPARAM>(Tr(L"尚未导入素材")));
+    for (const auto& entry : material_list_entries_)
+      SendMessageW(list, LB_ADDSTRING, 0,
+                   reinterpret_cast<LPARAM>(entry.name.c_str()));
+    SendMessageW(list, LB_SETTOPINDEX, top, 0);
+    SendMessageW(list, WM_SETREDRAW, TRUE, 0);
+  }
+  int selection = -1;
   std::wstring name;
-  for (const auto& style : draft_.user_styles) {
-    if (style.relative_path == draft_.style_file) {
-      name = style.name;
+  for (size_t i = 0; i < draft_.user_styles.size(); ++i) {
+    if (draft_.is_custom() && draft_.user_styles[i].name == draft_.style_name) {
+      name = draft_.user_styles[i].name;
+      selection = static_cast<int>(i);
       break;
     }
   }
+  EnableWindow(list, !busy && !draft_.user_styles.empty());
+  const auto previous = SendMessageW(list, LB_GETCURSEL, 0, 0);
+  SendMessageW(list, LB_SETCURSEL, selection, 0);
+  if (previous == selection) SendMessageW(list, LB_SETTOPINDEX, top, 0);
+  InvalidateRect(list, nullptr, FALSE);
   SetDlgItemTextW(materials_window_, IDC_MATERIAL_STATUS,
                   name.empty() ? Tr(L"未选择样式") : name.c_str());
   std::wstring details =
@@ -305,10 +534,13 @@ void SettingsWindow::LoadMaterialControls() {
               std::wstring(L"\n") + std::to_wstring(asset.width) + L" × " +
               std::to_wstring(asset.height) + Tr(L" 像素\n") +
               std::to_wstring(asset.frames.size()) + Tr(L" 帧");
-    if (!draft_.style_file.empty()) details += L"\n" + draft_.style_file;
+    for (const auto& entry : draft_.user_styles)
+      if (entry.name == draft_.style_name)
+        details += L"\n" + entry.relative_path;
     preview_details = (name.empty() ? std::wstring(Tr(L"当前素材")) : name) +
                       L"\n" + std::to_wstring(asset.width) + L" × " +
-                      std::to_wstring(asset.height);
+                      std::to_wstring(asset.height) + L"  ·  " +
+                      Tr(L"拖动图片 · 保存后生效");
   }
   SetDlgItemTextW(materials_window_, IDC_MATERIAL_DETAILS, details.c_str());
   SetDlgItemTextW(materials_window_, IDC_MATERIAL_PREVIEW_HINT,
@@ -346,9 +578,10 @@ void SettingsWindow::LayoutMaterials() {
   place(IDC_MATERIAL_PATH_LABEL, content_x + 16, card_y + 17, left_w - 160, 24);
   place(IDC_MATERIAL_PATH, content_x + 16, card_y + 45, left_w - 99, 31);
   place(IDC_MATERIAL_BROWSE, content_x + left_w - 76, card_y + 45, 60, 31);
-  place(IDC_MATERIAL_FORMATS, content_x + 16, card_y + 99, left_w - 170, 20);
+  place(IDC_MATERIAL_FORMATS, content_x + 16, card_y + 99, left_w - 244, 20);
+  place(IDC_MATERIAL_REFRESH, content_x + left_w - 188, card_y + 92, 66, 31);
   place(IDC_MATERIAL_IMPORT, content_x + left_w - 114, card_y + 92, 98, 31);
-  place(IDC_MATERIAL_IMPORT_HINT, content_x + 16, card_y + 119, left_w - 170,
+  place(IDC_MATERIAL_IMPORT_HINT, content_x + 16, card_y + 119, left_w - 244,
         18);
 
   place(IDC_MATERIAL_PREVIEW_LABEL, content_x + 16, preview_y + 16, 200, 24);
@@ -357,8 +590,8 @@ void SettingsWindow::LayoutMaterials() {
   place(IDC_MATERIAL_PREVIEW_HINT, content_x + 16, preview_y + preview_h - 52,
         left_w - 32, 40);
 
-  place(IDC_MATERIAL_STATUS, right_x + 76, card_y + 48, right_w - 92, 24);
-  place(IDC_MATERIAL_DETAILS, right_x + 16, card_y + 110, right_w - 32, 190);
+  place(IDC_MATERIAL_LIST, right_x + 16, card_y + 48, right_w - 32,
+        std::max(72, footer_top - 88 - card_y - 48));
 
   place(IDC_MATERIAL_HINT, content_x, footer_top + 9, content_w - 250, 20);
   const bool english = draft_.ui_language == UiLanguage::kEnglish;
@@ -434,30 +667,88 @@ void SettingsWindow::PaintMaterials(HDC dc) {
   tag(content_x + left_w - 16 - alpha_width, preview_y + 14, alpha_width,
       Tr(L"透明背景"));
 
-  settings_ui::Text(dc, material_fonts_[1], Tr(L"当前选择"),
+  settings_ui::Text(dc, material_fonts_[1], Tr(L"素材列表"),
                     RECT{px(right_x + 16), px(card_y + 16),
                          px(right_x + right_w - 16), px(card_y + 40)},
                     settings_ui::kText);
-  RECT thumb{px(right_x + 16), px(card_y + 48), px(right_x + 64),
-             px(card_y + 96)};
-  settings_ui::RoundedBox(materials_window_, dc, thumb,
-                          settings_ui::kPanelAlt, settings_ui::kBorder, px(9));
-  Gdiplus::Pen ring(settings_ui::Color(settings_ui::kAccent), px(3));
-  graphics.DrawEllipse(&ring, static_cast<float>(thumb.left + px(13)),
-                       static_cast<float>(thumb.top + px(13)),
-                       static_cast<float>(px(22)), static_cast<float>(px(22)));
-  settings_ui::HorizontalRule(materials_window_, dc, px(right_x + 16),
-                              px(right_x + right_w - 16), px(card_y + 100));
+  if (draft_.user_styles.empty()) {
+    settings_ui::Text(dc, material_fonts_[3], Tr(L"尚未导入素材"),
+                      RECT{px(right_x + 16), px(card_y + 48),
+                           px(right_x + right_w - 16), px(card_y + 96)},
+                      settings_ui::kMuted,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  }
   settings_ui::HorizontalRule(materials_window_, dc, px(right_x + 16),
                               px(right_x + right_w - 16), px(footer_top - 88));
-  settings_ui::Text(
-      dc, material_fonts_[3],
-      Tr(L"保存后可在主设置的“当前样式”中选择。\n删除文件前请先切换。"),
-      RECT{px(right_x + 16), px(footer_top - 80), px(right_x + right_w - 16),
-           px(footer_top - 38)},
-      settings_ui::kMuted, DT_LEFT | DT_TOP | DT_WORDBREAK);
+  settings_ui::Text(dc, material_fonts_[3],
+                    Tr(L"点击素材切换预览。\n保存配置后正式使用。"),
+                    RECT{px(right_x + 16), px(footer_top - 80),
+                         px(right_x + right_w - 16), px(footer_top - 38)},
+                    settings_ui::kMuted, DT_LEFT | DT_TOP | DT_WORDBREAK);
   settings_ui::HorizontalRule(materials_window_, dc, px(content_x),
                               px(content_right), px(footer_top));
+}
+
+void SettingsWindow::DrawMaterialListItem(const DRAWITEMSTRUCT& item) {
+  const settings_ui::PaintBuffer buffer(item.hDC, item.rcItem);
+  const HDC dc = buffer.dc();
+  const bool selected = (item.itemState & ODS_SELECTED) != 0;
+  settings_ui::Fill(dc, item.rcItem,
+                    selected ? settings_ui::kAccentTint : settings_ui::kPanel);
+  if (item.itemID >= material_list_entries_.size()) {
+    settings_ui::Text(dc, material_fonts_[3], Tr(L"尚未导入素材"), item.rcItem,
+                      settings_ui::kMuted,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    return;
+  }
+  const auto px = [&](int value) {
+    return settings_ui::Scale(item.hwndItem, value);
+  };
+  const auto& entry = material_list_entries_[item.itemID];
+  RECT thumb{item.rcItem.left, item.rcItem.top + px(12),
+             item.rcItem.left + px(48), item.rcItem.top + px(60)};
+  const auto asset = item.itemID < material_thumbnails_.size()
+                         ? material_thumbnails_[item.itemID]
+                         : nullptr;
+  if (asset && asset->width && asset->height && !asset->frames.empty()) {
+    Gdiplus::Graphics graphics(dc);
+    Gdiplus::Bitmap image(
+        asset->width, asset->height, asset->width * 4, PixelFormat32bppPARGB,
+        const_cast<BYTE*>(asset->frames.front().pixels.data()));
+    const float ratio =
+        std::min(static_cast<float>(thumb.right - thumb.left) / asset->width,
+                 static_cast<float>(thumb.bottom - thumb.top) / asset->height);
+    const float width = asset->width * ratio;
+    const float height = asset->height * ratio;
+    graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    graphics.DrawImage(
+        &image,
+        Gdiplus::RectF((thumb.left + thumb.right - width) / 2,
+                       (thumb.top + thumb.bottom - height) / 2, width, height));
+  } else {
+    settings_ui::Text(dc, material_fonts_[3], Tr(L"不可用"), thumb,
+                      settings_ui::kMuted,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+  }
+  RECT title{thumb.right + px(16), item.rcItem.top + px(12),
+             item.rcItem.right - px(4), item.rcItem.top + px(36)};
+  settings_ui::Text(dc, material_fonts_[0], entry.name.c_str(), title,
+                    settings_ui::kText,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+  RECT description{title.left, item.rcItem.top + px(36), title.right,
+                   item.rcItem.top + px(60)};
+  settings_ui::Text(dc, material_fonts_[3],
+                    asset ? (asset->is_gif ? Tr(L"GIF 动画") : Tr(L"静态图片"))
+                          : Tr(L"文件无法读取"),
+                    description, settings_ui::kMuted,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+  settings_ui::HorizontalRule(item.hwndItem, dc, item.rcItem.left,
+                              item.rcItem.right, item.rcItem.bottom - 1);
+  if ((item.itemState & ODS_FOCUS) && !(item.itemState & ODS_NOFOCUSRECT)) {
+    RECT focus = item.rcItem;
+    InflateRect(&focus, -px(2), -px(2));
+    DrawFocusRect(dc, &focus);
+  }
 }
 
 void SettingsWindow::DrawPreviewStage(HDC dc, HWND control,
@@ -465,7 +756,6 @@ void SettingsWindow::DrawPreviewStage(HDC dc, HWND control,
   const auto px = [control](int value) {
     return settings_ui::Scale(control, value);
   };
-  const float dpi = GetDpiForWindow(control) / 96.0f;
   const int width = bounds.right - bounds.left;
   const int height = bounds.bottom - bounds.top;
   if (width <= 0 || height <= 0) return;
@@ -499,14 +789,18 @@ void SettingsWindow::DrawPreviewStage(HDC dc, HWND control,
   settings_ui::Text(dc, small_font_, Tr(L"同步"), live_text,
                     settings_ui::kAccent, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   RECT hint{width - px(210), px(13), width - px(17), px(35)};
-  settings_ui::Text(dc, small_font_, Tr(L"点击穿透 · 不抢焦点"), hint,
-                    settings_ui::kStageMuted,
+  settings_ui::Text(dc, small_font_,
+                    draft_.is_custom() ? Tr(L"拖动图片 · 保存后生效")
+                                       : Tr(L"点击穿透 · 不抢焦点"),
+                    hint, settings_ui::kStageMuted,
                     DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
-  const float center_x = width / 2.0f;
+  const auto geometry = GetPreviewGeometry(control);
+  const auto offset = draft_.active_image_offset();
+  const float center_x = geometry.center_x;
   const float stage_top = static_cast<float>(px(45));
   const float stage_bottom = static_cast<float>(height - px(46));
-  const float center_y = (stage_top + stage_bottom) / 2.0f;
+  const float center_y = geometry.center_y;
   const float available_radius = std::max(
       1.0f,
       std::min(static_cast<float>(width - px(34)), stage_bottom - stage_top) /
@@ -525,8 +819,7 @@ void SettingsWindow::DrawPreviewStage(HDC dc, HWND control,
   // Fit the entire allowed range at a fixed scale, including half the widest
   // ring stroke (100 DIP radius + 20 / 2 DIP). Never clamp individual values:
   // every radius and thickness step must still change the preview geometry.
-  const float maximum_extent = draft_.is_custom() ? 256.0f : 110.0f;
-  const float radius_scale = available_radius / maximum_extent;
+  const float radius_scale = geometry.scale;
   const float radius = style.radius_dip * radius_scale;
   const float thickness = style.thickness_dip * radius_scale;
   const BYTE alpha =
@@ -565,17 +858,23 @@ void SettingsWindow::DrawPreviewStage(HDC dc, HWND control,
       attributes.SetColorMatrix(&matrix);
       graphics.SetInterpolationMode(
           Gdiplus::InterpolationModeHighQualityBicubic);
-      graphics.DrawImage(&image,
-                         Gdiplus::RectF(center_x - image_width / 2.0f,
-                                        center_y - image_height / 2.0f,
-                                        image_width, image_height),
-                         0.0f, 0.0f, static_cast<float>(asset.width),
-                         static_cast<float>(asset.height), Gdiplus::UnitPixel,
-                         &attributes);
+      const auto saved = graphics.Save();
+      graphics.SetClip(Gdiplus::Rect(geometry.area.left, geometry.area.top,
+                                     geometry.area.right - geometry.area.left,
+                                     geometry.area.bottom - geometry.area.top));
+      graphics.DrawImage(
+          &image,
+          Gdiplus::RectF(
+              center_x + offset.x_dip * radius_scale - image_width / 2.0f,
+              center_y + offset.y_dip * radius_scale - image_height / 2.0f,
+              image_width, image_height),
+          0.0f, 0.0f, static_cast<float>(asset.width),
+          static_cast<float>(asset.height), Gdiplus::UnitPixel, &attributes);
+      graphics.Restore(saved);
     }
   } else if (draft_.is_custom()) {
-    RECT empty{0, static_cast<LONG>(center_y) - px(11), width,
-               static_cast<LONG>(center_y) + px(11)};
+    RECT empty{0, static_cast<LONG>(center_y) + px(20), width,
+               static_cast<LONG>(center_y) + px(42)};
     settings_ui::Text(dc, small_font_, Tr(L"导入后在此预览"), empty,
                       settings_ui::kStageMuted,
                       DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -589,22 +888,8 @@ void SettingsWindow::DrawPreviewStage(HDC dc, HWND control,
                          radius * 2, radius * 2);
   }
 
-  if (!draft_.is_custom() ||
-      (draft_.image_asset && !draft_.image_asset->frames.empty())) {
-    const float cursor_scale = 0.95f * dpi;
-    Gdiplus::PointF cursor[] = {
-        {center_x, center_y},
-        {center_x, center_y + 28.0f * cursor_scale},
-        {center_x + 7.0f * cursor_scale, center_y + 22.0f * cursor_scale},
-        {center_x + 13.0f * cursor_scale, center_y + 33.0f * cursor_scale},
-        {center_x + 19.0f * cursor_scale, center_y + 30.0f * cursor_scale},
-        {center_x + 13.0f * cursor_scale, center_y + 19.0f * cursor_scale},
-        {center_x + 23.0f * cursor_scale, center_y + 19.0f * cursor_scale}};
-    Gdiplus::SolidBrush cursor_fill(Gdiplus::Color(255, 255, 255, 255));
-    Gdiplus::Pen cursor_edge(Gdiplus::Color(255, 9, 16, 24), 1.6f * dpi);
-    graphics.FillPolygon(&cursor_fill, cursor, 7);
-    graphics.DrawPolygon(&cursor_edge, cursor, 7);
-  }
+  graphics.Flush(Gdiplus::FlushIntentionSync);
+  DrawPreviewCursor(dc, control);
 
   const std::wstring mode =
       draft_.is_custom()
@@ -617,8 +902,7 @@ void SettingsWindow::DrawPreviewStage(HDC dc, HWND control,
                 static_cast<unsigned int>(GetRValue(style.color)),
                 static_cast<unsigned int>(GetGValue(style.color)),
                 static_cast<unsigned int>(GetBValue(style.color)));
-  const std::wstring radius_text =
-      std::to_wstring(style.radius_dip) + L" DIP";
+  const std::wstring radius_text = std::to_wstring(style.radius_dip) + L" DIP";
   const std::wstring hold_text =
       std::to_wstring(draft_.hold_seconds) + Tr(L" 秒后隐藏");
   const wchar_t* labels[] = {mode.c_str(), radius_text.c_str(),
@@ -704,17 +988,10 @@ void SettingsWindow::DrawMaterialPreview(const DRAWITEMSTRUCT& item) {
           }
         }
         if (asset.width && asset.height) {
-          const float inset =
-              static_cast<float>(settings_ui::Scale(item.hwndItem, 16));
-          const float available =
-              std::max(1.0f, std::min(width - inset, height - inset));
-          const float extent =
-              material
-                  ? available
-                  : std::min(available, 2.0f * settings_ui::Scale(
-                                                   item.hwndItem,
-                                                   draft_.custom.radius_dip));
-          const float ratio = extent / std::max(asset.width, asset.height);
+          const auto geometry = GetPreviewGeometry(item.hwndItem);
+          const auto offset = draft_.active_image_offset();
+          const float ratio = 2.0f * draft_.custom.radius_dip * geometry.scale /
+                              std::max(asset.width, asset.height);
           const float image_width = asset.width * ratio;
           const float image_height = asset.height * ratio;
           Gdiplus::Bitmap image(
@@ -725,15 +1002,22 @@ void SettingsWindow::DrawMaterialPreview(const DRAWITEMSTRUCT& item) {
               {{1, 0, 0, 0, 0},
                {0, 1, 0, 0, 0},
                {0, 0, 1, 0, 0},
-               {0, 0, 0,
-                material ? 1.0f : draft_.custom.opacity_percent / 100.0f, 0},
+               {0, 0, 0, draft_.custom.opacity_percent / 100.0f, 0},
                {0, 0, 0, 0, 1}}};
           attributes.SetColorMatrix(&matrix);
           graphics.SetInterpolationMode(
               Gdiplus::InterpolationModeHighQualityBicubic);
+          graphics.SetClip(
+              Gdiplus::Rect(geometry.area.left, geometry.area.top,
+                            geometry.area.right - geometry.area.left,
+                            geometry.area.bottom - geometry.area.top));
+          const float image_x =
+              geometry.center_x + offset.x_dip * geometry.scale;
+          const float image_y =
+              geometry.center_y + offset.y_dip * geometry.scale;
           graphics.DrawImage(&image,
-                             Gdiplus::RectF((width - image_width) / 2,
-                                            (height - image_height) / 2,
+                             Gdiplus::RectF(image_x - image_width / 2,
+                                            image_y - image_height / 2,
                                             image_width, image_height),
                              0.0f, 0.0f, static_cast<float>(asset.width),
                              static_cast<float>(asset.height),
@@ -764,15 +1048,13 @@ void SettingsWindow::DrawMaterialPreview(const DRAWITEMSTRUCT& item) {
         }
       }
     }
-    if ((material || draft_.is_custom()) && !draft_.image_asset) {
+    DrawPreviewCursor(dc, item.hwndItem);
+    if (!draft_.image_asset) {
+      RECT empty = bounds;
+      empty.top = height / 2 + settings_ui::Scale(item.hwndItem, 20);
       settings_ui::Text(dc, material ? material_fonts_[3] : small_font_,
-                        Tr(L"导入后在此预览"), bounds, settings_ui::kMuted,
-                        DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    } else if (!material) {
-      // Draw the system arrow as a sample; never replace or hide the cursor.
-      const int size = settings_ui::Scale(item.hwndItem, 26);
-      DrawIconEx(dc, width / 2, height / 2, LoadCursorW(nullptr, IDC_ARROW),
-                 size, size, 0, nullptr, DI_NORMAL);
+                        Tr(L"导入后在此预览"), empty, settings_ui::kMuted,
+                        DT_CENTER | DT_TOP | DT_SINGLELINE);
     }
     RestoreDC(dc, saved_dc);
     settings_ui::RoundedBox(item.hwndItem, dc, bounds, settings_ui::kPanel,

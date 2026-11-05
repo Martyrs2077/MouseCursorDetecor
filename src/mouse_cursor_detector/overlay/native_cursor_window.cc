@@ -33,6 +33,9 @@ bool NativeCursorWindow::ApplyStyle(const Settings& settings, UINT dpi,
                                     size_t frame_index) {
   const auto& style = settings.active_style();
   const float scale = dpi / 96.0f;
+  const auto offset = settings.active_image_offset();
+  image_offset_px_ = {MulDiv(offset.x_dip, dpi, 96),
+                      MulDiv(offset.y_dip, dpi, 96)};
   const float radius = style.radius_dip * scale;
   const float thickness = style.thickness_dip * scale;
   const int size = static_cast<int>(
@@ -114,8 +117,8 @@ bool NativeCursorWindow::ApplyStyle(const Settings& settings, UINT dpi,
 }
 
 void NativeCursorWindow::FollowCursor(POINT point) {
-  SetWindowPos(window_, nullptr, point.x - width_px_ / 2,
-               point.y - height_px_ / 2, 0, 0,
+  SetWindowPos(window_, nullptr, point.x - width_px_ / 2 + image_offset_px_.x,
+               point.y - height_px_ / 2 + image_offset_px_.y, 0, 0,
                SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER);
 }
 

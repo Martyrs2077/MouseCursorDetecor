@@ -78,7 +78,7 @@ void FitSize(UINT width, UINT height, UINT maximum, UINT* out_width,
 }
 
 bool Decode(IWICImagingFactory* factory, IWICBitmapDecoder* decoder,
-            ImageAsset* asset) {
+            ImageAsset* asset, bool thumbnail) {
   GUID format{};
   UINT count = 0;
   if (FAILED(decoder->GetContainerFormat(&format)) ||
@@ -109,7 +109,7 @@ bool Decode(IWICImagingFactory* factory, IWICBitmapDecoder* decoder,
       width > 4096 || height > 4096)
     return false;
   if (!asset->is_gif) {
-    FitSize(width, height, 512, &asset->width, &asset->height);
+    FitSize(width, height, thumbnail ? 96 : 512, &asset->width, &asset->height);
     ImageFrame frame;
     if (!CopyPixels(factory, first.Get(), asset->width, asset->height,
                     &frame.pixels))
@@ -127,7 +127,7 @@ bool Decode(IWICImagingFactory* factory, IWICBitmapDecoder* decoder,
       static_cast<uint64_t>(width) * height * count > kMaxDecodedPixels) {
     return false;
   }
-  FitSize(width, height, 256, &asset->width, &asset->height);
+  FitSize(width, height, thumbnail ? 96 : 256, &asset->width, &asset->height);
   const size_t canvas_bytes = static_cast<size_t>(width) * height * 4;
   std::vector<BYTE> canvas(canvas_bytes, 0);
   std::vector<BYTE> previous;
@@ -192,7 +192,7 @@ bool Decode(IWICImagingFactory* factory, IWICBitmapDecoder* decoder,
     }
     const UINT delay = Metadata(metadata.Get(), L"/grctlext/Delay", 10);
     // Zero-delay intermediate frames still affect composition.
-    if (delay || index + 1 == count) {
+    if (thumbnail || delay || index + 1 == count) {
       if (static_cast<uint64_t>(asset->width) * asset->height * 4 *
               (asset->frames.size() + 1) >
           kMaxCacheBytes)
@@ -211,6 +211,7 @@ bool Decode(IWICImagingFactory* factory, IWICBitmapDecoder* decoder,
         return false;
       asset->duration_ms += output.delay_ms;
       asset->frames.push_back(std::move(output));
+      if (thumbnail) return true;
     }
     if (disposal == 2) {
       const uint32_t fill =
@@ -243,7 +244,8 @@ bool IsManagedStylePath(const std::wstring& path) {
 }
 
 std::shared_ptr<const ImageAsset> LoadStyleFile(const std::wstring& path,
-                                                std::wstring* error) {
+                                                std::wstring* error,
+                                                bool thumbnail) {
   *error = L"无法读取素材，格式不受支持、文件损坏或超出限制。";
   try {
     std::error_code ec;
@@ -265,7 +267,7 @@ std::shared_ptr<const ImageAsset> LoadStyleFile(const std::wstring& path,
             decoder.GetAddressOf())))
       return nullptr;
     auto asset = std::make_shared<ImageAsset>();
-    if (!Decode(factory.Get(), decoder.Get(), asset.get())) {
+    if (!Decode(factory.Get(), decoder.Get(), asset.get(), thumbnail)) {
       *error =
           L"素材解码失败或超限：静态图最大 4096×4096；GIF 最大 "
           L"1024×1024、200 帧、64 Mi 像素处理量及 64 MiB 帧缓存。";
@@ -279,9 +281,12 @@ std::shared_ptr<const ImageAsset> LoadStyleFile(const std::wstring& path,
   }
 }
 
-StyleImportResult ImportStyleFile(const std::wstring& source) {
+StyleImportResult ImportStyleFile(
+    const std::wstring& source,
+    const std::vector<std::wstring>& reserved_paths) {
   StyleImportResult result;
   std::filesystem::path destination;
+  bool copied = false;
   try {
     const auto root = ApplicationDirectory();
     if (root.empty()) {
@@ -300,23 +305,42 @@ StyleImportResult ImportStyleFile(const std::wstring& source) {
       result.error = L"无法创建 styles 文件夹，请检查软件目录写入权限。";
       return result;
     }
-    GUID id{};
-    wchar_t name[40]{};
-    if (FAILED(CoCreateGuid(&id)) || !StringFromGUID2(id, name, 40)) {
-      result.error = L"无法生成素材文件名。";
+    const auto source_path = std::filesystem::path(source);
+    const auto original_name = source_path.filename().wstring();
+    if (!IsManagedStylePath(L"styles/" + original_name)) {
+      result.error = L"素材文件名无效或过长，请缩短文件名后重试。";
       return result;
     }
-    auto extension = std::filesystem::path(source).extension().wstring();
-    if (extension.size() > 12 ||
-        extension.find_first_not_of(L".abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN"
-                                    L"OPQRSTUVWXYZ0123456789") !=
-            std::wstring::npos)
-      extension = L".image";
-    const auto filename = std::wstring(name + 1, 36) + extension;
-    destination = directory / filename;
-    if (!CopyFileW(source.c_str(), destination.c_str(), TRUE)) {
-      result.error = L"无法复制素材，请检查源文件与软件目录写入权限。";
-      return result;
+    std::wstring filename = original_name;
+    for (uint32_t suffix = 0;; ++suffix) {
+      destination = directory / filename;
+      const bool reserved = std::any_of(
+          reserved_paths.begin(), reserved_paths.end(),
+          [&](const std::wstring& path) {
+            return CompareStringOrdinal(path.c_str(), -1,
+                                        (L"styles/" + filename).c_str(), -1,
+                                        TRUE) == CSTR_EQUAL;
+          });
+      const bool exists =
+          GetFileAttributesW(destination.c_str()) != INVALID_FILE_ATTRIBUTES;
+      if (!reserved && !exists &&
+          CopyFileW(source.c_str(), destination.c_str(), TRUE)) {
+        copied = true;
+        break;
+      }
+      const DWORD status = GetLastError();
+      if (!reserved && !exists && status != ERROR_FILE_EXISTS &&
+          status != ERROR_ALREADY_EXISTS) {
+        result.error = L"无法复制素材，请检查源文件与软件目录写入权限。";
+        return result;
+      }
+      filename = source_path.stem().wstring() + L"_" +
+                 std::to_wstring(suffix + 1) +
+                 source_path.extension().wstring();
+      if (!IsManagedStylePath(L"styles/" + filename)) {
+        result.error = L"重名后的素材文件名过长，请缩短文件名后重试。";
+        return result;
+      }
     }
     result.asset = LoadStyleFile(destination.wstring(), &result.error);
     if (!result.asset) {
@@ -327,7 +351,7 @@ StyleImportResult ImportStyleFile(const std::wstring& source) {
     result.original_filename =
         std::filesystem::path(source).filename().wstring();
   } catch (const std::exception&) {
-    if (!destination.empty()) {
+    if (copied) {
       std::error_code ec;
       std::filesystem::remove(destination, ec);
     }

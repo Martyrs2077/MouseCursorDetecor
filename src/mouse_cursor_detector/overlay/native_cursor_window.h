@@ -31,6 +31,7 @@ class NativeCursorWindow {
   HGDIOBJ original_bitmap_ = nullptr;
   int width_px_ = 0;
   int height_px_ = 0;
+  POINT image_offset_px_{};
 };
 }  // namespace mouse_cursor_detector
 

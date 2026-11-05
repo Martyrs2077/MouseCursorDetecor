@@ -26,14 +26,18 @@ struct StyleImportResult {
   std::wstring relative_path;
   std::wstring original_filename;
   std::shared_ptr<const ImageAsset> asset;
+  std::shared_ptr<const ImageAsset> thumbnail;
   std::wstring error;
 };
 
 std::wstring ApplicationDirectory();
 bool IsManagedStylePath(const std::wstring& relative_path);
 std::shared_ptr<const ImageAsset> LoadStyleFile(const std::wstring& path,
-                                                std::wstring* error);
-StyleImportResult ImportStyleFile(const std::wstring& source);
+                                                std::wstring* error,
+                                                bool thumbnail = false);
+StyleImportResult ImportStyleFile(
+    const std::wstring& source,
+    const std::vector<std::wstring>& reserved_paths);
 }  // namespace mouse_cursor_detector
 
 #endif  // MOUSE_CURSOR_DETECTOR_MEDIA_IMAGE_ASSET_H_

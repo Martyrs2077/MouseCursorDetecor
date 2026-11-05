@@ -286,8 +286,10 @@ bool ReadNumber(HWND window, int id, int minimum, int maximum, int* value) {
 }
 }  // namespace
 
-SettingsWindow::SettingsWindow(Preview preview, Commit commit, Startup startup)
+SettingsWindow::SettingsWindow(Preview preview, Commit commit, Startup startup,
+                               Preview recover_missing)
     : preview_(std::move(preview)),
+      recover_missing_(std::move(recover_missing)),
       commit_(std::move(commit)),
       startup_(std::move(startup)) {}
 
@@ -295,6 +297,10 @@ SettingsWindow::~SettingsWindow() {
   if (import_future_.valid()) {
     import_future_.wait();
     import_future_ = {};
+  }
+  if (library_future_.valid()) {
+    library_future_.wait();
+    library_future_ = {};
   }
   Close();
 }
@@ -307,7 +313,9 @@ void SettingsWindow::Show(HWND owner, const Settings& settings) {
   }
   owner_ = owner;
   original_ = settings;
-  draft_ = settings;
+  std::wstring library_error;
+  LoadStyleLibrary(&original_.user_styles, &library_error);
+  draft_ = original_;
   SetUiLanguage(draft_.ui_language);
   page_ = Page::kMain;
   theme_applied_ = false;
@@ -356,6 +364,9 @@ void SettingsWindow::Show(HWND owner, const Settings& settings) {
   }
   ShowWindow(window_, SW_SHOW);
   SetForegroundWindow(window_);
+  if (!library_error.empty())
+    MessageBoxW(window_, Tr(library_error.c_str()), Tr(L"素材刷新"),
+                MB_OK | MB_ICONWARNING);
 }
 
 void SettingsWindow::CreateControls() {
@@ -437,7 +448,8 @@ void SettingsWindow::CreateControls() {
          ids::kOpacitySlider);
   add(L"STATIC", L"", 0, ids::kRangeHint, small_font_);
   add(L"STATIC", Tr(L"实时更新"), SS_RIGHT, 253, small_font_);
-  add(L"STATIC", L"", SS_OWNERDRAW, ids::kPreview);
+  add(L"STATIC", L"", SS_OWNERDRAW | SS_NOTIFY, ids::kPreview);
+  PreparePreview(GetDlgItem(window_, ids::kPreview));
   add(L"STATIC", L"",
       SS_LEFTNOWORDWRAP | SS_ENDELLIPSIS | SS_NOPREFIX | SS_NOTIFY,
       ids::kPreviewHint, small_font_);
@@ -649,18 +661,18 @@ void SettingsWindow::LoadControls() {
   settings_ui::UseTheme(draft_.ui_theme);
   const auto& style = draft_.active_style();
   const bool ring = draft_.mode == IndicatorMode::kRing;
-  // Only entries already saved from the import dialog are selectable.
+  // The draft library includes imports and files discovered by refresh.
   while (SendDlgItemMessageW(window_, ids::kMode, CB_GETCOUNT, 0, 0) >
          kBuiltinModeCount) {
     SendDlgItemMessageW(window_, ids::kMode, CB_DELETESTRING, kBuiltinModeCount,
                         0);
   }
   int selection = draft_.is_custom() ? -1 : static_cast<int>(draft_.mode);
-  for (size_t i = 0; i < original_.user_styles.size(); ++i) {
-    const auto& entry = original_.user_styles[i];
+  for (size_t i = 0; i < draft_.user_styles.size(); ++i) {
+    const auto& entry = draft_.user_styles[i];
     SendDlgItemMessageW(window_, ids::kMode, CB_ADDSTRING, 0,
                         reinterpret_cast<LPARAM>(entry.name.c_str()));
-    if (draft_.is_custom() && entry.relative_path == draft_.style_file &&
+    if (draft_.is_custom() && entry.name == draft_.style_name &&
         draft_.image_asset) {
       selection = kBuiltinModeCount + static_cast<int>(i);
     }
@@ -678,9 +690,9 @@ void SettingsWindow::LoadControls() {
                   draft_.is_custom() ? Tr(L"半尺寸") : Tr(L"半径"));
   for (const int id : {ids::kMode, ids::kRingChoice, ids::kHighlightChoice,
                        ids::kReset, IDOK}) {
-    EnableWindow(GetDlgItem(window_, id), !import_future_.valid());
+    EnableWindow(GetDlgItem(window_, id), !MaterialBusy());
   }
-  EnableWindow(GetDlgItem(window_, ids::kMaterials), !import_future_.valid());
+  EnableWindow(GetDlgItem(window_, ids::kMaterials), !MaterialBusy());
   SyncSliders();
   LoadMaterialControls();
   UpdateHotkeyLabel();
@@ -690,7 +702,7 @@ void SettingsWindow::LoadControls() {
   if (draft_.is_custom()) {
     preview_label = Tr(L"自定义素材");
     for (const auto& entry : draft_.user_styles) {
-      if (entry.relative_path == draft_.style_file) {
+      if (entry.name == draft_.style_name) {
         preview_label = entry.name;
         break;
       }
@@ -711,10 +723,7 @@ void SettingsWindow::LoadControls() {
   RefreshPreview();
   for (const int id : {ids::kRingChoice, ids::kHighlightChoice})
     InvalidateRect(GetDlgItem(window_, id), nullptr, FALSE);
-  if (draft_.mode == IndicatorMode::kGif && draft_.image_asset)
-    SetTimer(window_, settings_ui::kAnimationTimer, 33, nullptr);
-  else
-    KillTimer(window_, settings_ui::kAnimationTimer);
+  SetTimer(window_, settings_ui::kAnimationTimer, 33, nullptr);
   loading_ = false;
   RefreshLanguage();
 }
@@ -790,7 +799,7 @@ void SettingsWindow::RefreshLanguage() {
   if (draft_.is_custom()) {
     preview_label = Tr(L"自定义素材");
     for (const auto& entry : draft_.user_styles) {
-      if (entry.relative_path == draft_.style_file) {
+      if (entry.name == draft_.style_name) {
         preview_label = entry.name;
         break;
       }
@@ -805,9 +814,10 @@ void SettingsWindow::RefreshLanguage() {
         {IDC_MATERIAL_PATH_LABEL, L"导入新素材"},
         {IDC_MATERIAL_BROWSE, L"浏览"},
         {IDC_MATERIAL_IMPORT, L"导入素材"},
+        {IDC_MATERIAL_REFRESH, L"刷新"},
         {IDC_MATERIAL_PREVIEW_LABEL, L"素材预览"},
-        {IDC_MATERIAL_FORMATS, L"最大 20 MiB · 导入后可命名并预览"},
-        {IDOK, L"保存样式"},
+        {IDC_MATERIAL_FORMATS, L"最大 20 MiB"},
+        {IDOK, L"保存配置"},
         {IDCANCEL, L"取消"},
     };
     SetWindowTextW(materials_window_, Tr(L"素材库"));
@@ -853,9 +863,9 @@ bool SettingsWindow::ReadControls(bool report_error) {
   const bool thickness_valid =
       !ring || (ReadNumber(window_, ids::kThickness, 1, 20, &thickness) &&
                 (!radius_valid || thickness < radius * 2));
-  const bool opacity_valid = ReadNumber(
-      window_, ids::kOpacity, 10,
-      draft_.mode == IndicatorMode::kHighlight ? 50 : 100, &opacity);
+  const int min_opacity = draft_.mode == IndicatorMode::kHighlight ? 0 : 10;
+  const bool opacity_valid =
+      ReadNumber(window_, ids::kOpacity, min_opacity, 100, &opacity);
   const bool hold_valid =
       ReadNumber(window_, ids::kHoldSeconds, 1, 3600, &hold_seconds);
   settings_ui::SetFieldError(GetDlgItem(window_, ids::kRadius), !radius_valid);
@@ -880,9 +890,7 @@ bool SettingsWindow::ReadControls(bool report_error) {
           : ring && (!ReadNumber(window_, ids::kThickness, 1, 20, &ignored) ||
                      ignored >= radius * 2)
               ? ids::kThickness
-          : !ReadNumber(window_, ids::kOpacity, 10,
-                        draft_.mode == IndicatorMode::kHighlight ? 50 : 100,
-                        &ignored)
+          : !ReadNumber(window_, ids::kOpacity, min_opacity, 100, &ignored)
               ? ids::kOpacity
               : ids::kHoldSeconds;
       SetFocus(GetDlgItem(window_, focus));
@@ -898,15 +906,8 @@ bool SettingsWindow::ReadControls(bool report_error) {
 }
 
 void SettingsWindow::PreviewDraft() {
+  // Draft changes are confined to the settings preview until Commit succeeds.
   RefreshPreview();
-  // An empty custom mode is selectable so the user can reach the import dialog.
-  // Until a valid asset is supplied, keep the last usable visual settings.
-  if (draft_.is_custom() &&
-      (!draft_.image_asset ||
-       (draft_.mode == IndicatorMode::kGif && !draft_.image_asset->is_gif)))
-    return;
-  preview_(draft_);
-  preview_settings_ = draft_;
 }
 
 void SettingsWindow::SyncSliders() {
@@ -930,9 +931,8 @@ void SettingsWindow::SyncSliders() {
     if (changed) InvalidateRect(slider, nullptr, FALSE);
   };
   sync(ids::kRadiusSlider, 8, draft_.is_custom() ? 256 : 100, style.radius_dip);
-  sync(ids::kOpacitySlider, 10,
-       draft_.mode == IndicatorMode::kHighlight ? 50 : 100,
-       style.opacity_percent);
+  sync(ids::kOpacitySlider, draft_.mode == IndicatorMode::kHighlight ? 0 : 10,
+       100, style.opacity_percent);
   sync(ids::kThicknessSlider, 1, std::min(20, style.radius_dip * 2 - 1),
        style.thickness_dip);
 }
@@ -1062,7 +1062,7 @@ void SettingsWindow::Command(int id, int notification) {
     return;
   }
   if (id >= ids::kThemeFirst && id <= ids::kThemeLast) {
-    if (naming_style_ || import_future_.valid()) return;
+    if (naming_style_ || MaterialBusy()) return;
     draft_.ui_theme = static_cast<UiTheme>(id - ids::kThemeFirst);
     ApplyTheme();
     return;
@@ -1071,7 +1071,7 @@ void SettingsWindow::Command(int id, int notification) {
     CloseMaterials(id == IDOK);
     return;
   }
-  if (naming_style_ || (import_future_.valid() &&
+  if (naming_style_ || (MaterialBusy() &&
                         (id == ids::kMode || id == ids::kRingChoice ||
                          id == ids::kHighlightChoice || id == ids::kMaterials ||
                          id == ids::kReset || id == IDOK)))
@@ -1093,7 +1093,7 @@ void SettingsWindow::Command(int id, int notification) {
     }
     if (index >= kBuiltinModeCount &&
         index - kBuiltinModeCount <
-            static_cast<LRESULT>(original_.user_styles.size())) {
+            static_cast<LRESULT>(draft_.user_styles.size())) {
       BeginSelectStyle(static_cast<size_t>(index - kBuiltinModeCount));
       return;
     }
@@ -1138,7 +1138,7 @@ void SettingsWindow::Command(int id, int notification) {
     LoadControls();
     PreviewDraft();
   } else if (id == IDOK) {
-    if (import_future_.valid()) return;
+    if (MaterialBusy()) return;
     if (!ReadControls(true)) return;
     if (draft_.is_custom() &&
         (!draft_.image_asset ||
@@ -1337,13 +1337,17 @@ LRESULT CALLBACK SettingsWindow::WindowProc(HWND window, UINT message,
       case WM_TIMER:
         if (wparam == settings_ui::kAnimationTimer) {
           if (self->page_ == Page::kMain && IsWindowVisible(window) &&
-              !IsIconic(window) && self->draft_.mode == IndicatorMode::kGif &&
-              self->draft_.image_asset)
-            InvalidateRect(GetDlgItem(window, ids::kPreview), nullptr, FALSE);
+              !IsIconic(window)) {
+            const bool changed = self->RefreshPreviewCursor();
+            if (changed || (self->draft_.mode == IndicatorMode::kGif &&
+                            self->draft_.image_asset))
+              InvalidateRect(GetDlgItem(window, ids::kPreview), nullptr, FALSE);
+          }
           return 0;
         }
         if (wparam == kImportTimer) {
           self->FinishImport();
+          self->FinishLibraryRefresh();
           return 0;
         }
         break;
@@ -1385,7 +1389,7 @@ LRESULT CALLBACK SettingsWindow::WindowProc(HWND window, UINT message,
 void SettingsWindow::Close() {
   if (!window_) return;
   if (naming_style_) return;
-  if (import_future_.valid()) {
+  if (MaterialBusy()) {
     MessageBoxW(window_, Tr(L"正在导入素材，请稍候再关闭设置。"),
                 Tr(L"素材导入"), MB_OK);
     return;
@@ -1436,7 +1440,7 @@ bool SettingsWindow::IsCapturingHotkey() const {
 }
 
 void SettingsWindow::BrowseStyle() {
-  if (import_future_.valid() || !materials_window_) return;
+  if (MaterialBusy() || !materials_window_) return;
   std::vector<wchar_t> path(32768);
   OPENFILENAMEW dialog{};
   dialog.lStructSize = sizeof(dialog);
@@ -1452,9 +1456,113 @@ void SettingsWindow::BrowseStyle() {
     SetDlgItemTextW(materials_window_, kSourcePath, path.data());
 }
 
-void SettingsWindow::BeginImport() {
-  if (import_future_.valid() || !materials_window_ || !ReadControls(true))
+void SettingsWindow::BeginLibraryRefresh() {
+  if (MaterialBusy() || naming_style_ || !materials_window_) return;
+  if (!SetTimer(window_, kImportTimer, 50, nullptr)) {
+    MessageBoxW(materials_window_, Tr(L"无法初始化素材刷新，请重试。"),
+                Tr(L"素材刷新"), MB_OK | MB_ICONWARNING);
     return;
+  }
+  try {
+    const auto styles = draft_.user_styles;
+    const auto baseline = original_.user_styles;
+    const auto name = draft_.style_name;
+    library_future_ =
+        std::async(std::launch::async, [styles, baseline, name]() {
+          return RefreshStyleLibrary(styles, baseline, name);
+        });
+    LoadControls();
+    SetDlgItemTextW(materials_window_, IDC_MATERIAL_IMPORT_HINT,
+                    Tr(L"正在刷新…"));
+  } catch (const std::exception&) {
+    KillTimer(window_, kImportTimer);
+    LoadControls();
+    MessageBoxW(materials_window_, Tr(L"无法启动素材刷新，请重试。"),
+                Tr(L"素材刷新"), MB_OK | MB_ICONWARNING);
+  }
+}
+
+void SettingsWindow::FinishLibraryRefresh() {
+  if (!IsWindowVisible(window_) || IsIconic(window_) ||
+      !library_future_.valid() ||
+      library_future_.wait_for(std::chrono::seconds(0)) !=
+          std::future_status::ready)
+    return;
+  KillTimer(window_, kImportTimer);
+  StyleLibraryResult result;
+  try {
+    result = library_future_.get();
+  } catch (const std::exception&) {
+    result.error = Tr(L"素材刷新失败，请检查文件和可用内存。");
+  }
+  if (!result.success) {
+    LoadControls();
+    MessageBoxW(materials_window_, Tr(result.error.c_str()), Tr(L"素材刷新"),
+                MB_OK | MB_ICONWARNING);
+    return;
+  }
+  const auto missing = [&](const Settings& settings) {
+    return !settings.style_name.empty() &&
+           (!HasStyleName(result.styles, settings.style_name) ||
+            std::find(result.missing_names.begin(), result.missing_names.end(),
+                      settings.style_name) != result.missing_names.end());
+  };
+  // Actual file deletion is independent of the user's unsaved selection.
+  const bool active_missing = original_.is_custom() && missing(original_);
+  if (active_missing) {
+    Settings fallback = original_;
+    fallback.user_styles = result.styles;
+    fallback.ResetMissingStyle();
+    // Commit reports storage failure. Still stop displaying the deleted asset.
+    if (!commit_(fallback)) recover_missing_(fallback);
+    original_ = fallback;
+    preview_settings_ = fallback;
+    materials_previous_preview_ = fallback;
+  }
+  for (Settings* snapshot : {&draft_, &materials_before_}) {
+    if (missing(*snapshot)) {
+      if (snapshot->is_custom()) {
+        snapshot->ResetMissingStyle();
+      } else {
+        snapshot->style_name.clear();
+        snapshot->image_asset.reset();
+      }
+    }
+    snapshot->user_styles = result.styles;
+  }
+  if (!active_missing) {
+    if (missing(original_)) {
+      original_.style_name.clear();
+      original_.image_asset.reset();
+    }
+    if (missing(materials_previous_preview_)) {
+      if (materials_previous_preview_.is_custom()) {
+        materials_previous_preview_.ResetMissingStyle();
+      } else {
+        materials_previous_preview_.style_name.clear();
+        materials_previous_preview_.image_asset.reset();
+      }
+    }
+  }
+  // Library maintenance never commits the current draft selection.
+  original_.user_styles = result.styles;
+  preview_settings_.user_styles = result.styles;
+  materials_previous_preview_.user_styles = result.styles;
+  if (draft_.is_custom() && !draft_.style_name.empty())
+    draft_.image_asset = std::move(result.selected_asset);
+  material_thumbnails_ = std::move(result.thumbnails);
+  preview_started_ = GetTickCount64();
+  LoadControls();
+  if (active_missing)
+    SetDlgItemTextW(materials_window_, IDC_MATERIAL_IMPORT_HINT,
+                    Tr(L"已恢复默认光圈"));
+  if (!result.error.empty())
+    MessageBoxW(materials_window_, Tr(result.error.c_str()), Tr(L"素材刷新"),
+                MB_OK | MB_ICONWARNING);
+}
+
+void SettingsWindow::BeginImport() {
+  if (MaterialBusy() || !materials_window_ || !ReadControls(true)) return;
   if (draft_.user_styles.size() >= kMaxUserStyles) {
     MessageBoxW(materials_window_, Tr(L"样式库最多保存 512 个素材。"),
                 Tr(L"素材导入"), MB_OK);
@@ -1484,8 +1592,19 @@ void SettingsWindow::BeginImport() {
   }
   try {
     pending_style_index_ = -1;
-    import_future_ = std::async(std::launch::async,
-                                [source]() { return ImportStyleFile(source); });
+    std::vector<std::wstring> reserved_paths;
+    for (const auto& entry : draft_.user_styles)
+      reserved_paths.push_back(entry.relative_path);
+    import_future_ = std::async(std::launch::async, [source, reserved_paths]() {
+      auto result = ImportStyleFile(source, reserved_paths);
+      if (result.asset) {
+        std::wstring error;
+        result.thumbnail =
+            LoadMappedStyle({{result.original_filename, result.relative_path}},
+                            result.original_filename, &error, true);
+      }
+      return result;
+    });
     LoadControls();
     SetDlgItemTextW(materials_window_, kSelectedFile,
                     Tr(L"正在验证并导入素材…"));
@@ -1497,8 +1616,9 @@ void SettingsWindow::BeginImport() {
 }
 
 void SettingsWindow::BeginSelectStyle(size_t index) {
-  if (import_future_.valid() || index >= original_.user_styles.size()) return;
-  const auto relative_path = original_.user_styles[index].relative_path;
+  if (MaterialBusy() || index >= draft_.user_styles.size()) return;
+  const auto name = draft_.user_styles[index].name;
+  const auto styles = draft_.user_styles;
   if (!SetTimer(window_, kImportTimer, 50, nullptr)) {
     MessageBoxW(window_, Tr(L"无法初始化素材加载，请重试。"), Tr(L"样式选择"),
                 MB_OK);
@@ -1507,12 +1627,13 @@ void SettingsWindow::BeginSelectStyle(size_t index) {
   }
   try {
     pending_style_index_ = static_cast<int>(index);
-    import_future_ = std::async(std::launch::async, [relative_path]() {
+    import_future_ = std::async(std::launch::async, [styles, name]() {
       StyleImportResult result;
-      result.relative_path = relative_path;
-      const auto full =
-          std::filesystem::path(ApplicationDirectory()) / relative_path;
-      result.asset = LoadStyleFile(full.wstring(), &result.error);
+      result.asset = LoadMappedStyle(styles, name, &result.error);
+      if (result.asset) {
+        std::wstring error;
+        result.thumbnail = LoadMappedStyle(styles, name, &error, true);
+      }
       return result;
     });
     LoadControls();
@@ -1539,7 +1660,10 @@ void SettingsWindow::FinishImport() {
   }
   // Preserve any numeric edits made while the asynchronous task was running.
   ReadControls(false);
+  std::wstring selected_name;
   if (result.asset) {
+    if (pending_style_index_ >= 0)
+      selected_name = draft_.user_styles[pending_style_index_].name;
     bool use_style = pending_style_index_ >= 0;
     if (!use_style) {
       StyleNameDialog data{&draft_.user_styles, result.original_filename, {}};
@@ -1550,9 +1674,25 @@ void SettingsWindow::FinishImport() {
           reinterpret_cast<LPARAM>(&data));
       naming_style_ = false;
       if (choice == IDOK) {
-        draft_.user_styles.push_back(
-            {std::move(data.name), result.relative_path});
-        use_style = true;
+        selected_name = data.name;
+        auto styles = draft_.user_styles;
+        styles.push_back({std::move(data.name), result.relative_path});
+        if (SaveStyleLibrary(styles) == ERROR_SUCCESS) {
+          draft_.user_styles = std::move(styles);
+          original_.user_styles = draft_.user_styles;
+          materials_before_.user_styles = draft_.user_styles;
+          preview_settings_.user_styles = draft_.user_styles;
+          materials_previous_preview_.user_styles = draft_.user_styles;
+          material_thumbnails_.push_back(result.thumbnail);
+          use_style = true;
+        } else {
+          const auto full = std::filesystem::path(ApplicationDirectory()) /
+                            result.relative_path;
+          DeleteFileW(full.c_str());
+          MessageBoxW(materials_window_,
+                      Tr(L"素材映射表保存失败，未切换当前素材。"),
+                      Tr(L"素材导入失败"), MB_OK | MB_ICONWARNING);
+        }
       } else {
         // This is a new private copy, never a previously saved style file.
         const auto full = std::filesystem::path(ApplicationDirectory()) /
@@ -1565,7 +1705,11 @@ void SettingsWindow::FinishImport() {
       }
     }
     if (use_style) {
-      draft_.style_file = std::move(result.relative_path);
+      if (pending_style_index_ >= 0 &&
+          static_cast<size_t>(pending_style_index_) <
+              material_thumbnails_.size())
+        material_thumbnails_[pending_style_index_] = result.thumbnail;
+      draft_.style_name = std::move(selected_name);
       draft_.image_asset = std::move(result.asset);
       preview_started_ = GetTickCount64();
       draft_.mode = draft_.image_asset->is_gif ? IndicatorMode::kGif
@@ -1581,7 +1725,8 @@ void SettingsWindow::FinishImport() {
         pending_style_index_ < 0 ? Tr(L"素材导入失败") : Tr(L"样式加载失败"),
         MB_ICONWARNING);
   }
+  pending_style_index_ = -1;
   LoadControls();
-  if (!materials_window_) PreviewDraft();
+  PreviewDraft();
 }
 }  // namespace mouse_cursor_detector

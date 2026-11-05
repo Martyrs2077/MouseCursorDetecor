@@ -165,8 +165,11 @@ void SettingsWindow::ApplyTheme() {
 }
 
 void SettingsWindow::SelectPage(Page page) {
-  if (page == page_) return;
-  if (naming_style_ || import_future_.valid()) {
+  if (page == page_) {
+    if (page == Page::kMaterials) BeginLibraryRefresh();
+    return;
+  }
+  if (naming_style_ || MaterialBusy()) {
     MessageBoxW(window_, Tr(L"正在处理素材，请完成后再切换页面。"),
                 Tr(L"素材导入"), MB_OK | MB_ICONINFORMATION);
     return;

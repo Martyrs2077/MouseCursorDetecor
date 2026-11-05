@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 4,
   "ui_language": 0,
   "ui_theme": 3,
   "mode": 1,
@@ -19,6 +19,6 @@
   "hotkey_modifiers": 0,
   "hotkey_vk": 188,
   "hotkey_secondary_vk": 190,
-  "style_file": "",
-  "style_count": 0
+  "style_name": "",
+  "image_offset_count": 0
 }

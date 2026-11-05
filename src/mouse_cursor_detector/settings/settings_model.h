@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -42,6 +43,12 @@ struct UserStyle {
 
 constexpr size_t kMaxUserStyles = 512;
 constexpr size_t kMaxStyleNameLength = 255;
+constexpr int kMaxImageOffsetDip = 512;
+
+struct ImageOffset {
+  int x_dip = 0;
+  int y_dip = 0;
+};
 
 inline std::wstring TrimStyleName(const std::wstring& name) {
   const auto first = name.find_first_not_of(L" \t\r\n");
@@ -75,13 +82,25 @@ struct Settings {
   IndicatorStyle ring;
   IndicatorStyle highlight{RGB(255, 255, 0), 24, 1, 25};
   IndicatorStyle custom{RGB(255, 255, 255), 48, 1, 100};
-  std::wstring style_file;
+  // Only the library maps a selected name to its managed file.
+  std::wstring style_name;
   std::vector<UserStyle> user_styles;
+  // Draft positions are independent of immediately saved library maintenance.
+  std::map<std::wstring, ImageOffset> image_offsets;
   std::shared_ptr<const ImageAsset> image_asset;
   UINT hotkey_modifiers = 0;
   UINT hotkey_vk = VK_OEM_COMMA;
   UINT hotkey_secondary_vk = VK_OEM_PERIOD;
   int hold_seconds = 3;
+
+  void ResetMissingStyle() {
+    mode = IndicatorMode::kRing;
+    ring = IndicatorStyle{};
+    custom = IndicatorStyle{RGB(255, 255, 255), 48, 1, 100};
+    hold_seconds = 3;
+    style_name.clear();
+    image_asset.reset();
+  }
 
   const IndicatorStyle& active_style() const {
     if (is_custom()) return custom;
@@ -91,7 +110,19 @@ struct Settings {
     return mode == IndicatorMode::kImage || mode == IndicatorMode::kGif;
   }
 
+  ImageOffset active_image_offset() const {
+    const auto found = image_offsets.find(style_name);
+    return is_custom() && found != image_offsets.end() ? found->second
+                                                       : ImageOffset{};
+  }
+
   void Normalize() {
+    for (auto& entry : image_offsets) {
+      entry.second.x_dip = std::clamp(entry.second.x_dip, -kMaxImageOffsetDip,
+                                      kMaxImageOffsetDip);
+      entry.second.y_dip = std::clamp(entry.second.y_dip, -kMaxImageOffsetDip,
+                                      kMaxImageOffsetDip);
+    }
     if (static_cast<uint32_t>(ui_language) >
         static_cast<uint32_t>(UiLanguage::kEnglish)) {
       ui_language = UiLanguage::kChinese;
@@ -113,9 +144,9 @@ struct Settings {
       style->radius_dip = std::clamp(style->radius_dip, 8, 100);
       style->thickness_dip = std::clamp(
           style->thickness_dip, 1, std::min(20, style->radius_dip * 2 - 1));
-      const int max_opacity = style == &highlight ? 50 : 100;
+      const int min_opacity = style == &highlight ? 0 : 10;
       style->opacity_percent =
-          std::clamp(style->opacity_percent, 10, max_opacity);
+          std::clamp(style->opacity_percent, min_opacity, 100);
     }
     if (hotkey_vk == 0 || hotkey_vk > 0xfe ||
         (hotkey_modifiers & ~(MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN)) !=

@@ -47,7 +47,7 @@
 <text x="76" y="511" font-size="12" fill="#333" font-weight="400">开机自启动（登录后启动软件）</text>
 <rect x="362" y="490" width="160" height="32" rx="5" fill="#fff" stroke="#ccc"/>
 <text x="375" y="511" font-size="13" fill="#333" font-weight="400">导入光圈样式</text>
-<text x="36" y="542" font-size="12" fill="#777" font-weight="400">高亮不透明度为 10%–50%；时长下次触发生效。</text>
+<text x="36" y="542" font-size="12" fill="#777" font-weight="400">高亮不透明度为 0%–100%；时长下次触发生效。</text>
 <text x="36" y="559" font-size="12" fill="#777" font-weight="400">不修改系统原有光标。</text>
 <rect x="36" y="570" width="110" height="32" rx="5" fill="#fff" stroke="#ccc"/>
 <text x="49" y="591" font-size="13" fill="#333" font-weight="400">恢复默认</text>

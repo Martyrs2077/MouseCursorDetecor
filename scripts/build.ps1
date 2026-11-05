@@ -1,4 +1,4 @@
-# User-invoked build entry point. The assistant must not execute this script.
+# Build entry point: manual use or assistant use before an explicitly requested push.
 [CmdletBinding()]
 param()
 
@@ -13,7 +13,7 @@ $publishedInstaller = Join-Path $publishDir 'MouseCursorDetector-Setup.exe'
 $installerScript = Join-Path $projectRoot 'installer\MouseCursorDetector.iss'
 
 function Get-InstallerCompiler {
-    # Run only when the user invokes build.cmd. Keep the tool local and portable.
+    # Run only for an authorized build. Keep the tool local and portable.
     $toolsDir = Join-Path $projectRoot '.tools'
     $compilerDir = Join-Path $toolsDir 'innosetup-6.7.4'
     $compiler = Join-Path $compilerDir 'ISCC.exe'

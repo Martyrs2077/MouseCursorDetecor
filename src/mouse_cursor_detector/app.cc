@@ -71,7 +71,12 @@ int App::Run(bool autostart) {
   settings_window_ = std::make_unique<SettingsWindow>(
       [this](const Settings& settings) { Preview(settings); },
       [this](const Settings& settings) { return Commit(settings); },
-      [this]() { ToggleStartup(); });
+      [this]() { ToggleStartup(); },
+      [this](const Settings& settings) {
+        // Deleted assets must stop being used even when saving is unavailable.
+        settings_ = settings;
+        Preview(settings_);
+      });
   if (!hotkey_.Replace(window_, settings_.hotkey_modifiers, settings_.hotkey_vk,
                        settings_.hotkey_secondary_vk)) {
     Report(Tr(L"键盘输入监听初始化失败，请退出后重试。"), GetLastError());

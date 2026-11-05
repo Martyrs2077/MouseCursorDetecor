@@ -1,4 +1,4 @@
-; Built only through the user-invoked scripts/build.ps1 entry point.
+; Built only through the authorized scripts/build.ps1 entry point.
 #ifndef AppExe
   #error AppExe must point to the validated Release executable.
 #endif
