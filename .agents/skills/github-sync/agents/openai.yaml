@@ -1,4 +1,0 @@
-interface:
-  display_name: "MouseCursorDetector GitHub 同步"
-  short_description: "将本项目提交并推送到 Dev 分支，或只以快进方式拉取更新"
-  default_prompt: "使用 $github-sync，按项目约定将本次相关改动提交并推送到 GitHub 的 Dev 分支。"

@@ -5,4 +5,5 @@ dist/
 /styles/
 .reference/
 /design-previews/
+/.agents/skills/github-sync/
 *.user

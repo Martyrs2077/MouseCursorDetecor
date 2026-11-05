@@ -182,7 +182,7 @@ src/mouse_cursor_detector/
 
 2026-11-05 经用户确认，本目录已建立独立 Git 仓库，Git 根目录必须为本项目目录。同步目标为 `Martyrs2077/MouseCursorDetecor` 的 `Dev` 分支；不得在 `C:\Users\25036` 的上级仓库中暂存、提交或推送本项目。
 
-源码、文档、构建配置、项目技能和根目录两个交付物 `MouseCursorDetector.exe`、`MouseCursorDetector-Setup.exe` 纳入版本控制；`config/`、`styles/`、`build/`、`dist/`、`.tools/`、`.reference/` 和 `design-previews/` 保留在本地，不提交。首次覆盖远端分支已获用户明确授权，后续同步仍默认普通推送；再次重写远端历史需另行获得用户明确授权。
+源码、文档、构建配置、可共享的项目技能和根目录两个交付物 `MouseCursorDetector.exe`、`MouseCursorDetector-Setup.exe` 纳入版本控制；`config/`、`styles/`、`build/`、`dist/`、`.tools/`、`.reference/` 和 `design-previews/` 保留在本地，不提交。`.agents/skills/github-sync/` 是本地专用技能，整个目录不纳入版本控制，不得随代码提交或推送；该限制不影响技能执行用户授权的其他代码提交和推送。首次覆盖远端分支已获用户明确授权，后续同步仍默认普通推送；再次重写远端历史需另行获得用户明确授权。
 
 默认运行及构建所需素材必须随源码提交，当前包括 `src/mouse_cursor_detector/resources/` 中的图标、清单和许可。默认光圈与高亮由代码绘制，无外部素材依赖；`config/settings.json` 当前没有引用自定义素材。后续若增加文件形式的默认素材，应同步提交其文件并核对配置引用完整性。
 
