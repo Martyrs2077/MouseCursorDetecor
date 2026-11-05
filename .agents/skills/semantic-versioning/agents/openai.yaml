@@ -1,0 +1,4 @@
+interface:
+  display_name: "MouseCursorDetector 版本迭代"
+  short_description: "按 SemVer 判断版本增幅，同步本项目版本定义与发布记录，保留手动构建和发布授权边界"
+  default_prompt: "使用 $semantic-versioning 分析本项目自上次发布以来的变化，按已确认的规则准备下一版本的定义与变更记录，说明产物和发布状态。"
